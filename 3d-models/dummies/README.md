@@ -1,0 +1,1 @@
+Here, the simplified models of the Diptyx enclosures are stored. These can be used for 3d printing mockups, web-previews, etc. Note that these are for reference only, and can differ significantly from the production units.
