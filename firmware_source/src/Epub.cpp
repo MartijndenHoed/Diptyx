@@ -155,7 +155,7 @@ while (cover)
       m_cover_image_item = href;
     }
     // grab the ncx file
-    if (item_id == "ncx"  || item_id == "ncx_toc")
+    if (item_id == "ncx"  || item_id == "ncx_toc" || item_id == "toc")
     {
       m_toc_ncx_item = href;
     }

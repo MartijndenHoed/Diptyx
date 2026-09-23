@@ -44,7 +44,7 @@ public:
         int standbyScreen = 1;
         int sunlightMode = 0;
         int showPagePercentage = 0;
-        int storeDataOnSD = 0;
+        int storeDataOnSD = 1;
         int smartImageDetect = 0;
         int standbyShutdown = 7;
         int sunlightFullRefresh = 0;

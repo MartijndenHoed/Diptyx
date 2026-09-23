@@ -116,10 +116,13 @@ MenuHandler::MenuHandler(Renderer *renderer)
     "Firmware version",
     "Review firmware version and patch notes",
     []() {
-       Device::getInstance().state = Device::State::simpleReader;
-        Device::getInstance().activeBookPath = "firmwareVersion.epub";
-        Device::getInstance().simpleReader->init("firmwareVersion.epub",Device::getInstance().renderer);
-        Device::getInstance().saveAppState();
+    //    Device::getInstance().state = Device::State::simpleReader;
+    //     Device::getInstance().activeBookPath = "firmwareVersion.epub";
+    //     Device::getInstance().simpleReader->init("firmwareVersion.epub",Device::getInstance().renderer);
+    //     Device::getInstance().saveAppState();
+    Device::getInstance().notificationHandler->drawNotification("Firmware version: 1.0.1");
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    Device::getInstance().menuHandler->drawMenu();
     }
 );
 

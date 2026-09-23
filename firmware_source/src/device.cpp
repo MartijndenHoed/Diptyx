@@ -307,7 +307,7 @@ void Device::configureButtons()
 
 void Device::clearButtonLatches()
 {
-    ESP_LOGI("Device", "Clearing all latches");
+    //ESP_LOGI("Device", "Clearing all latches");
     for (int i = 0; i < NUM_BUTTONS; i++) {
         buttonLatchedStates[button_pins[i]]=false;
     }
@@ -338,10 +338,10 @@ void Device::pollButtons()
 
 void Device::setLatchTimeOut(int duration)
 {
-    ESP_LOGI("Device", "Setting Latch Timeout");
+    //ESP_LOGI("Device", "Setting Latch Timeout");
     this->latchTimeOut = int(esp_timer_get_time()) + duration;
-    ESP_LOGI("Device", "current Time: %d", int(esp_timer_get_time()));
-    ESP_LOGI("Device", "set Time: %d", latchTimeOut);
+    //ESP_LOGI("Device", "current Time: %d", int(esp_timer_get_time()));
+    //ESP_LOGI("Device", "set Time: %d", latchTimeOut);
 }
 
 void Device::displayOffScreen(std::string message)

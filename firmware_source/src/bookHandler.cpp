@@ -738,20 +738,32 @@ void BookHandler::listBooks(void)
         if (dev.activeBookPath.empty()) dev.activeBookPath = fileName;
     }
     closedir(dir);
-
     // Step 3: Prune metadata for missing books (not found in /sdcard)
-    for (auto it = indexedBooks.begin(); it != indexedBooks.end();) {
-        if (std::find(foundPaths.begin(), foundPaths.end(), it->first) == foundPaths.end()) {
-            // Remove JSON file
-            std::string metaFile = std::string("/bookStorage/books/") + it->first + ".json";
-            unlink(metaFile.c_str());
-            delete it->second;
-            it = indexedBooks.erase(it);
-            ESP_LOGI(TAG, "Pruned stale metadata for %s", metaFile.c_str());
-        } else {
-            ++it;
+const char *basePath =
+    Device::getInstance().deviceSettings.storeDataOnSD
+        ? "/sdcard/book_data"
+        : "/littlefs/books";
+
+for (auto it = indexedBooks.begin(); it != indexedBooks.end();) {
+    if (std::find(foundPaths.begin(), foundPaths.end(), it->first) == foundPaths.end()) {
+
+        if (it->second->badParse) {
+            std::string metaFile =
+                std::string(basePath) + "/" + it->first + ".json";
+
+            if (unlink(metaFile.c_str()) == 0) {
+                ESP_LOGI(TAG, "Pruned stale bad-parse metadata: %s", metaFile.c_str());
+            } else {
+                ESP_LOGW(TAG, "Failed to remove stale bad-parse metadata: %s", metaFile.c_str());
+            }
         }
+
+        delete it->second;
+        it = indexedBooks.erase(it);
+    } else {
+        ++it;
     }
+}
 
     // Step 4: Sort books into authorList
     for (Book* b : bookList) {
