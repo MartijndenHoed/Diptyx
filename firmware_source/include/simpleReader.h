@@ -5,7 +5,7 @@
 #include <string.h>
 #include "htmlParser.h"
 #include <Epub.h>
-#include "bookhandler.h"
+#include "bookHandler.h"
 #include "bookMarkMenuHandler.h"
 extern "C" {
 
