@@ -8,11 +8,11 @@ const std::vector<std::string_view> HEADER_TAGS = {"h1", "h2", "h3", "h4", "h5",
 const std::vector<std::string_view> BLOCK_TAGS  = {"p", "li", "div", "blockquote", "svg","table","tbody","tr","td"};
 const std::vector<std::string_view> EMPTY_LINE_TAGS = {"br", "br/"};
 const std::vector<std::string_view> INLINE_TAGS = {"span", "a"};
-const std::vector<std::string_view> BOLD_TAGS = {"b"};
+const std::vector<std::string_view> BOLD_TAGS = {"b","strong"};
 const std::vector<std::string_view> ITALIC_TAGS = {"i", "em"};
 const std::vector<std::string_view> IMAGE_TAGS = {"img"};
 const std::vector<std::string_view> COVER_TAGS = {"image"};
-const std::vector<std::string_view> SKIP_TAGS = {"title", "style"};
+const std::vector<std::string_view> SKIP_TAGS = {"title", "style","hidden"};
 const std::vector<std::string_view> BODY_TAGS = {"body"};
 const std::vector<std::string_view> LINK_TAGS = {"link"};
 
@@ -132,7 +132,12 @@ bool HtmlParser::VisitEnter(const tinyxml2::XMLElement &element, const tinyxml2:
         const char *styleClass = element.Attribute("class");
         if(styleClass)
         {
-            this->styleHierarchy.back().applyClass(cssCache, styleClass);
+          std::string firstClass(styleClass);
+          size_t spacePos = firstClass.find_first_of(" \t\r\n");
+          if(spacePos != std::string::npos)
+              firstClass.resize(spacePos);
+
+          this->styleHierarchy.back().applyClass(cssCache, firstClass.c_str());
         }
 
         contentParser->parseImage(image,styleHierarchy.back(),drawPage);
@@ -184,7 +189,12 @@ bool HtmlParser::VisitEnter(const tinyxml2::XMLElement &element, const tinyxml2:
         const char *styleClass = element.Attribute("class");
         if(styleClass)
         {
-            this->styleHierarchy.back().applyClass(cssCache, styleClass);
+          std::string firstClass(styleClass);
+          size_t spacePos = firstClass.find_first_of(" \t\r\n");
+          if(spacePos != std::string::npos)
+              firstClass.resize(spacePos);
+
+          this->styleHierarchy.back().applyClass(cssCache, firstClass.c_str());
         }
 
         this->styleHierarchy.back().width = EPD_HEIGHT; //'image' tags are only used on covers, and should cover the full page
@@ -220,7 +230,12 @@ bool HtmlParser::VisitEnter(const tinyxml2::XMLElement &element, const tinyxml2:
     const char *styleClass = element.Attribute("class");
     if(styleClass)
     {
-        this->styleHierarchy.back().applyClass(cssCache, styleClass);
+        std::string firstClass(styleClass);
+        size_t spacePos = firstClass.find_first_of(" \t\r\n");
+        if(spacePos != std::string::npos)
+            firstClass.resize(spacePos);
+
+        this->styleHierarchy.back().applyClass(cssCache, firstClass.c_str());
     }
   }
   else if (matches(tag_name, EMPTY_LINE_TAGS))
@@ -238,7 +253,12 @@ bool HtmlParser::VisitEnter(const tinyxml2::XMLElement &element, const tinyxml2:
     const char *styleClass = element.Attribute("class");
     if(styleClass)
     {
-        this->styleHierarchy.back().applyClass(cssCache, styleClass);
+        std::string firstClass(styleClass);
+        size_t spacePos = firstClass.find_first_of(" \t\r\n");
+        if(spacePos != std::string::npos)
+            firstClass.resize(spacePos);
+
+        this->styleHierarchy.back().applyClass(cssCache, firstClass.c_str());
     }
   }
   else if (matches(tag_name, INLINE_TAGS))
@@ -249,7 +269,12 @@ bool HtmlParser::VisitEnter(const tinyxml2::XMLElement &element, const tinyxml2:
     const char *styleClass = element.Attribute("class");
     if(styleClass)
     {
-      this->styleHierarchy.back().applyClass(cssCache, styleClass);
+      std::string firstClass(styleClass);
+      size_t spacePos = firstClass.find_first_of(" \t\r\n");
+      if(spacePos != std::string::npos)
+          firstClass.resize(spacePos);
+
+      this->styleHierarchy.back().applyClass(cssCache, firstClass.c_str());
     }
   }
   else if (matches(tag_name, BOLD_TAGS))
@@ -259,7 +284,12 @@ bool HtmlParser::VisitEnter(const tinyxml2::XMLElement &element, const tinyxml2:
         const char *styleClass = element.Attribute("class");
     if(styleClass)
     {
-        this->styleHierarchy.back().applyClass(cssCache, styleClass);
+        std::string firstClass(styleClass);
+        size_t spacePos = firstClass.find_first_of(" \t\r\n");
+        if(spacePos != std::string::npos)
+            firstClass.resize(spacePos);
+
+        this->styleHierarchy.back().applyClass(cssCache, firstClass.c_str());
     }
   }
   else if (matches(tag_name, ITALIC_TAGS))
@@ -269,7 +299,12 @@ bool HtmlParser::VisitEnter(const tinyxml2::XMLElement &element, const tinyxml2:
         const char *styleClass = element.Attribute("class");
     if(styleClass)
     {
-        this->styleHierarchy.back().applyClass(cssCache, styleClass);
+        std::string firstClass(styleClass);
+        size_t spacePos = firstClass.find_first_of(" \t\r\n");
+        if(spacePos != std::string::npos)
+            firstClass.resize(spacePos);
+
+        this->styleHierarchy.back().applyClass(cssCache, firstClass.c_str());
     }
   }
     else if (matches(tag_name, LINK_TAGS))
@@ -311,6 +346,13 @@ bool HtmlParser::VisitEnter(const tinyxml2::XMLElement &element, const tinyxml2:
         }
     }
   }
+  const char* hiddenAttr = element.Attribute("hidden");
+  if (hiddenAttr && (strcmp(hiddenAttr, "true") == 0 || strcmp(hiddenAttr, "hidden") == 0))
+  {
+    return false;
+  }
+
+
   return true;
 }
 /// Visit a text node.

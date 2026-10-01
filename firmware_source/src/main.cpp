@@ -415,6 +415,10 @@ void main_task(void *param) {
             {
                 reader->middleButtonAction();
             }
+            else if(device.state==Device::State::simpleReader)
+            {
+                simpleReader->middleButtonAction();
+            }
         }
         if(device.buttonLatchedStates[ARROW_UP_BUTTON] || device.buttonStates[ARROW_UP_BUTTON])
         {

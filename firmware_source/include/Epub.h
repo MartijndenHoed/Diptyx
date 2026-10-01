@@ -28,6 +28,8 @@ private:
   std::string m_cover_image_item;
   // the ncx file
   std::string m_toc_ncx_item;
+  //the nav file (for EPUB3)
+  std::string m_nav_item;
   // where is the EPUBfile?
   std::string m_path;
   // the spine of the EPUB file
@@ -40,6 +42,7 @@ private:
   bool find_content_opf_file(ZipFile &zip, std::string &content_opf_file);
   bool parse_content_opf(ZipFile &zip, std::string &content_opf_file);
   bool parse_toc_ncx_file(ZipFile &zip);
+  bool parse_nav_file(ZipFile &zip);
 
 public:
   Epub(const std::string &path);

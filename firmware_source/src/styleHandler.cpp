@@ -70,6 +70,21 @@ int Style::translateFontSize(const std::string& fontSizeValue) {
         }
         return Device::getInstance().renderSettings.fontSize; // fallback
     }
+
+    // 3. Handle percentages
+    size_t percentPos = fontSizeValue.find('%');
+    if (percentPos != std::string::npos) {
+        std::string numberPart = fontSizeValue.substr(0, percentPos);
+
+        char* endPtr = nullptr;
+        double val = std::strtod(numberPart.c_str(), &endPtr);
+
+        if (endPtr != numberPart.c_str()) {
+            return std::min(3, static_cast<int>(std::round(fontSize * val / 100.0)));
+        }
+
+        return fontSize; // fallback
+    }
     return Device::getInstance().renderSettings.fontSize;
 }
 

@@ -32,6 +32,7 @@ public:
     std::vector <int> pageElementIndex {0,0,0};
     std::vector <bool> pageImagePresent {false,false,false};
     bool imagePreviouslyPresent = false;
+    bool exitGuideEnabled = false;
 
     //int currentPage = 0;
     int currentChapter = 0;

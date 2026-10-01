@@ -147,6 +147,13 @@ void SimpleReader::openPage()
     if((imagePreviouslyPresent!=pageImagePresent[1]) || pageImagePresent[1]) renderer->epd.forceRefresh();
     imagePreviouslyPresent=pageImagePresent[1];
     renderer->drawBattery(rightPageFrameBuffer,Device::getInstance().getBatteryPercentage());
+    if(exitGuideEnabled)
+    {
+        std::string manualExitGuide = "To exit, finish the manual by proceeding to the last page";
+        this->renderer->framebuffer = leftPageFrameBuffer;
+        this->renderer->drawSquare(EPD_HEIGHT/2 - manualExitGuide.length()*GLYPH_WIDTH/4,2, manualExitGuide.length()*GLYPH_WIDTH/2,GLYPH_HEIGHT,true);
+        this->renderer->drawString(EPD_HEIGHT/2 - manualExitGuide.length()*GLYPH_WIDTH/4,2,manualExitGuide,1,false,false);
+    }
     this->renderer->epd.DisplayPictureBoth(
         leftPageFrameBuffer,
         rightPageFrameBuffer,
@@ -198,6 +205,13 @@ void SimpleReader::nextPage()
 
 
     renderer->drawBattery(rightPageFrameBufferNext,Device::getInstance().getBatteryPercentage());
+    if(exitGuideEnabled)
+    {
+        std::string manualExitGuide = "To exit, finish the manual by proceeding to the last page";
+        this->renderer->framebuffer = leftPageFrameBufferNext;
+        this->renderer->drawSquare(EPD_HEIGHT/2 - manualExitGuide.length()*GLYPH_WIDTH/4,2, manualExitGuide.length()*GLYPH_WIDTH/2,GLYPH_HEIGHT,true);
+        this->renderer->drawString(EPD_HEIGHT/2 - manualExitGuide.length()*GLYPH_WIDTH/4,2,manualExitGuide,1,false,false);
+    }
     ESP_LOGI(TAG, "image present array: %d %d %d",
          static_cast<int>(pageImagePresent[0]),
          static_cast<int>(pageImagePresent[1]),
@@ -248,6 +262,13 @@ void SimpleReader::prevPage()
     {
         book->currentPage -= 2;
         renderer->drawBattery(rightPageFrameBufferPrevious,Device::getInstance().getBatteryPercentage());
+        if(exitGuideEnabled)
+        {
+        std::string manualExitGuide = "To exit, finish the manual by proceeding to the last page";
+        this->renderer->framebuffer = leftPageFrameBufferPrevious;
+        this->renderer->drawSquare(EPD_HEIGHT/2 - manualExitGuide.length()*GLYPH_WIDTH/4,2, manualExitGuide.length()*GLYPH_WIDTH/2,GLYPH_HEIGHT,true);
+        this->renderer->drawString(EPD_HEIGHT/2 - manualExitGuide.length()*GLYPH_WIDTH/4,2,manualExitGuide,1,false,false);
+        }   
         ESP_LOGI(TAG, "image present array: %d %d %d",
          static_cast<int>(pageImagePresent[0]),
          static_cast<int>(pageImagePresent[1]),
@@ -367,5 +388,9 @@ void SimpleReader::rightPageAction()
 
 void SimpleReader::middleButtonAction()
 {
-
+    if(exitGuideEnabled==false)
+    {
+        exitGuideEnabled = true;
+        openPage();
+    }
 }
