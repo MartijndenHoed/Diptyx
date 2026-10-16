@@ -13,12 +13,225 @@ static const char *TAG = "renderer";
 
 
 static const std::unordered_map<std::string, int> htmlEntities = {
-    {"amp",  '&'},
-    {"lt",   '<'},
-    {"gt",   '>'},
-    {"quot", '"'},
-    {"apos", '\''},
-    {"nbsp", 0x00A0}, // non-breaking space
+    // Basic XML / HTML entities
+    {"amp",    0x0026}, // &  Ampersand
+    {"lt",     0x003C}, // <  Less than
+    {"gt",     0x003E}, // >  Greater than
+    {"quot",   0x0022}, // "  Double quotation mark
+    {"apos",   0x0027}, // '  Apostrophe
+    {"nbsp",   0x00A0}, //    Non-breaking space
+
+    // Latin-1: punctuation and symbols
+    {"iexcl",  0x00A1}, // ¡  Inverted exclamation mark
+    {"cent",   0x00A2}, // ¢  Cent sign
+    {"pound",  0x00A3}, // £  Pound sign
+    {"curren", 0x00A4}, // ¤  Currency sign
+    {"yen",    0x00A5}, // ¥  Yen sign
+    {"brvbar", 0x00A6}, // ¦  Broken bar
+    {"sect",   0x00A7}, // §  Section sign
+    {"uml",    0x00A8}, // ¨  Diaeresis
+    {"copy",   0x00A9}, // ©  Copyright sign
+    {"ordf",   0x00AA}, // ª  Feminine ordinal indicator
+    {"laquo",  0x00AB}, // «  Left double angle quotation mark
+    {"not",    0x00AC}, // ¬  Not sign
+    {"shy",    0x00AD}, //    Soft hyphen
+    {"reg",    0x00AE}, // ®  Registered sign
+    {"macr",   0x00AF}, // ¯  Macron
+    {"deg",    0x00B0}, // °  Degree sign
+    {"plusmn", 0x00B1}, // ±  Plus-minus sign
+    {"sup2",   0x00B2}, // ²  Superscript two
+    {"sup3",   0x00B3}, // ³  Superscript three
+    {"acute",  0x00B4}, // ´  Acute accent
+    {"micro",  0x00B5}, // µ  Micro sign
+    {"para",   0x00B6}, // ¶  Pilcrow
+    {"middot", 0x00B7}, // ·  Middle dot
+    {"cedil",  0x00B8}, // ¸  Cedilla
+    {"sup1",   0x00B9}, // ¹  Superscript one
+    {"ordm",   0x00BA}, // º  Masculine ordinal indicator
+    {"raquo",  0x00BB}, // »  Right double angle quotation mark
+    {"frac14", 0x00BC}, // ¼  One quarter
+    {"frac12", 0x00BD}, // ½  One half
+    {"frac34", 0x00BE}, // ¾  Three quarters
+    {"iquest", 0x00BF}, // ¿  Inverted question mark
+
+    // Latin-1: accented letters
+    {"Agrave", 0x00C0}, // À
+    {"Aacute", 0x00C1}, // Á
+    {"Acirc",  0x00C2}, // Â
+    {"Atilde", 0x00C3}, // Ã
+    {"Auml",   0x00C4}, // Ä
+    {"Aring",  0x00C5}, // Å
+    {"AElig",  0x00C6}, // Æ
+    {"Ccedil", 0x00C7}, // Ç
+    {"Egrave", 0x00C8}, // È
+    {"Eacute", 0x00C9}, // É
+    {"Ecirc",  0x00CA}, // Ê
+    {"Euml",   0x00CB}, // Ë
+    {"Igrave", 0x00CC}, // Ì
+    {"Iacute", 0x00CD}, // Í
+    {"Icirc",  0x00CE}, // Î
+    {"Iuml",   0x00CF}, // Ï
+    {"ETH",    0x00D0}, // Ð
+    {"Ntilde", 0x00D1}, // Ñ
+    {"Ograve", 0x00D2}, // Ò
+    {"Oacute", 0x00D3}, // Ó
+    {"Ocirc",  0x00D4}, // Ô
+    {"Otilde", 0x00D5}, // Õ
+    {"Ouml",   0x00D6}, // Ö
+    {"times",  0x00D7}, // ×
+    {"Oslash", 0x00D8}, // Ø
+    {"Ugrave", 0x00D9}, // Ù
+    {"Uacute", 0x00DA}, // Ú
+    {"Ucirc",  0x00DB}, // Û
+    {"Uuml",   0x00DC}, // Ü
+    {"Yacute", 0x00DD}, // Ý
+    {"THORN",  0x00DE}, // Þ
+    {"szlig",  0x00DF}, // ß
+
+    {"agrave", 0x00E0}, // à
+    {"aacute", 0x00E1}, // á
+    {"acirc",  0x00E2}, // â
+    {"atilde", 0x00E3}, // ã
+    {"auml",   0x00E4}, // ä
+    {"aring",  0x00E5}, // å
+    {"aelig",  0x00E6}, // æ
+    {"ccedil", 0x00E7}, // ç
+    {"egrave", 0x00E8}, // è
+    {"eacute", 0x00E9}, // é
+    {"ecirc",  0x00EA}, // ê
+    {"euml",   0x00EB}, // ë
+    {"igrave", 0x00EC}, // ì
+    {"iacute", 0x00ED}, // í
+    {"icirc",  0x00EE}, // î
+    {"iuml",   0x00EF}, // ï
+    {"eth",    0x00F0}, // ð
+    {"ntilde", 0x00F1}, // ñ
+    {"ograve", 0x00F2}, // ò
+    {"oacute", 0x00F3}, // ó
+    {"ocirc",  0x00F4}, // ô
+    {"otilde", 0x00F5}, // õ
+    {"ouml",   0x00F6}, // ö
+    {"divide", 0x00F7}, // ÷
+    {"oslash", 0x00F8}, // ø
+    {"ugrave", 0x00F9}, // ù
+    {"uacute", 0x00FA}, // ú
+    {"ucirc",  0x00FB}, // û
+    {"uuml",   0x00FC}, // ü
+    {"yacute", 0x00FD}, // ý
+    {"thorn",  0x00FE}, // þ
+    {"yuml",   0x00FF}, // ÿ
+
+    // Ligatures and special Latin letters
+    {"OElig",  0x0152}, // Œ
+    {"oelig",  0x0153}, // œ
+    {"Scaron", 0x0160}, // Š
+    {"scaron", 0x0161}, // š
+    {"Yuml",   0x0178}, // Ÿ
+    {"fnof",   0x0192}, // ƒ
+
+    // Spacing and directional marks
+    {"ensp",   0x2002}, // En space
+    {"emsp",   0x2003}, // Em space
+    {"thinsp", 0x2009}, // Thin space
+    {"zwnj",   0x200C}, // Zero-width non-joiner
+    {"zwj",    0x200D}, // Zero-width joiner
+    {"lrm",    0x200E}, // Left-to-right mark
+    {"rlm",    0x200F}, // Right-to-left mark
+
+    // Typographic punctuation
+    {"ndash",  0x2013}, // –  En dash
+    {"mdash",  0x2014}, // —  Em dash
+    {"lsquo",  0x2018}, // ‘  Left single quotation mark
+    {"rsquo",  0x2019}, // ’  Right single quotation mark
+    {"sbquo",  0x201A}, // ‚  Single low-9 quotation mark
+    {"ldquo",  0x201C}, // “  Left double quotation mark
+    {"rdquo",  0x201D}, // ”  Right double quotation mark
+    {"bdquo",  0x201E}, // „  Double low-9 quotation mark
+    {"dagger", 0x2020}, // †  Dagger
+    {"Dagger", 0x2021}, // ‡  Double dagger
+    {"bull",   0x2022}, // •  Bullet
+    {"hellip", 0x2026}, // …  Horizontal ellipsis
+    {"permil", 0x2030}, // ‰  Per mille
+    {"prime",  0x2032}, // ′  Prime
+    {"Prime",  0x2033}, // ″  Double prime
+    {"lsaquo", 0x2039}, // ‹  Single left angle quotation mark
+    {"rsaquo", 0x203A}, // ›  Single right angle quotation mark
+    {"oline",  0x203E}, // ‾  Overline
+    {"frasl",  0x2044}, // ⁄  Fraction slash
+
+    // Currency
+    {"euro",   0x20AC}, // €  Euro sign
+
+    // Mathematical operators and symbols
+    {"weierp", 0x2118}, // ℘  Weierstrass p
+    {"image",  0x2111}, // ℑ  Imaginary part
+    {"real",   0x211C}, // ℜ  Real part
+    {"trade",  0x2122}, // ™  Trademark
+    {"alefsym",0x2135}, // ℵ  Alef symbol
+    {"larr",   0x2190}, // ←  Left arrow
+    {"uarr",   0x2191}, // ↑  Up arrow
+    {"rarr",   0x2192}, // →  Right arrow
+    {"darr",   0x2193}, // ↓  Down arrow
+    {"harr",   0x2194}, // ↔  Left-right arrow
+    {"crarr",  0x21B5}, // ↵  Carriage return arrow
+    {"lArr",   0x21D0}, // ⇐  Left double arrow
+    {"uArr",   0x21D1}, // ⇑  Up double arrow
+    {"rArr",   0x21D2}, // ⇒  Right double arrow
+    {"dArr",   0x21D3}, // ⇓  Down double arrow
+    {"hArr",   0x21D4}, // ⇔  Left-right double arrow
+    {"forall", 0x2200}, // ∀  For all
+    {"part",   0x2202}, // ∂  Partial differential
+    {"exist",  0x2203}, // ∃  There exists
+    {"empty",  0x2205}, // ∅  Empty set
+    {"nabla",  0x2207}, // ∇  Nabla
+    {"isin",   0x2208}, // ∈  Element of
+    {"notin",  0x2209}, // ∉  Not an element of
+    {"ni",     0x220B}, // ∋  Contains as member
+    {"prod",   0x220F}, // ∏  Product
+    {"sum",    0x2211}, // ∑  Summation
+    {"minus",  0x2212}, // −  Minus sign
+    {"lowast", 0x2217}, // ∗  Asterisk operator
+    {"radic",  0x221A}, // √  Square root
+    {"prop",   0x221D}, // ∝  Proportional to
+    {"infin",  0x221E}, // ∞  Infinity
+    {"ang",    0x2220}, // ∠  Angle
+    {"and",    0x2227}, // ∧  Logical AND
+    {"or",     0x2228}, // ∨  Logical OR
+    {"cap",    0x2229}, // ∩  Intersection
+    {"cup",    0x222A}, // ∪  Union
+    {"int",    0x222B}, // ∫  Integral
+    {"there4", 0x2234}, // ∴  Therefore
+    {"sim",    0x223C}, // ∼  Tilde operator
+    {"cong",   0x2245}, // ≅  Approximately equal
+    {"asymp",  0x2248}, // ≈  Almost equal
+    {"ne",     0x2260}, // ≠  Not equal
+    {"equiv",  0x2261}, // ≡  Equivalent to
+    {"le",     0x2264}, // ≤  Less than or equal
+    {"ge",     0x2265}, // ≥  Greater than or equal
+    {"sub",    0x2282}, // ⊂  Subset
+    {"sup",    0x2283}, // ⊃  Superset
+    {"nsub",   0x2284}, // ⊄  Not a subset
+    {"sube",   0x2286}, // ⊆  Subset or equal
+    {"supe",   0x2287}, // ⊇  Superset or equal
+    {"oplus",  0x2295}, // ⊕  Circled plus
+    {"otimes", 0x2297}, // ⊗  Circled times
+    {"perp",   0x22A5}, // ⊥  Perpendicular
+    {"sdot",   0x22C5}, // ⋅  Dot operator
+
+    // Miscellaneous technical symbols
+    {"lceil",  0x2308}, // ⌈  Left ceiling
+    {"rceil",  0x2309}, // ⌉  Right ceiling
+    {"lfloor", 0x230A}, // ⌊  Left floor
+    {"rfloor", 0x230B}, // ⌋  Right floor
+    {"lang",   0x2329}, // 〈  Left angle bracket
+    {"rang",   0x232A}, // 〉  Right angle bracket
+
+    // Geometric shapes and card suits
+    {"loz",    0x25CA}, // ◊  Lozenge
+    {"spades", 0x2660}, // ♠  Spades
+    {"clubs",  0x2663}, // ♣  Clubs
+    {"hearts", 0x2665}, // ♥  Hearts
+    {"diams",  0x2666}, // ♦  Diamonds
 };
 
 int utf8ToCodePoints(const char* utf8, int* out, int maxOutLen) {
