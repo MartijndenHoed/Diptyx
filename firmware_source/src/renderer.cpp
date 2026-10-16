@@ -196,6 +196,34 @@ std::vector<int> utf8ToCodePoints(const std::string& utf8) {
     return codepoints;
 }
 
+std::vector<int> ISO8859_1ToCodePoints(const std::string& input) {
+    std::vector<int> codepoints;
+    codepoints.reserve(input.size());
+
+    // Windows-1252 mappings for bytes 0x80–0x9F.
+    static constexpr int windows1252[32] = {
+        0x20AC, 0x0081, 0x201A, 0x0192, // 80–83
+        0x201E, 0x2026, 0x2020, 0x2021, // 84–87
+        0x02C6, 0x2030, 0x0160, 0x2039, // 88–8B
+        0x0152, 0x008D, 0x017D, 0x008F, // 8C–8F
+        0x0090, 0x2018, 0x2019, 0x201C, // 90–93
+        0x201D, 0x2022, 0x2013, 0x2014, // 94–97
+        0x02DC, 0x2122, 0x0161, 0x203A, // 98–9B
+        0x0153, 0x009D, 0x017E, 0x0178  // 9C–9F
+    };
+
+    for (unsigned char c : input) {
+        if (c >= 0x80 && c <= 0x9F) {
+            codepoints.push_back(windows1252[c - 0x80]);
+        } else {
+            // Other bytes map directly, as in ISO-8859-1.
+            codepoints.push_back(static_cast<int>(c));
+        }
+    }
+
+    return codepoints;
+}
+
 void Renderer::init(void)
 {
     //framebuffer = (unsigned char*)malloc(EPD_WIDTH * EPD_HEIGHT / 8);

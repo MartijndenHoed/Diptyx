@@ -12,7 +12,7 @@ const std::vector<std::string_view> BOLD_TAGS = {"b","strong"};
 const std::vector<std::string_view> ITALIC_TAGS = {"i", "em"};
 const std::vector<std::string_view> IMAGE_TAGS = {"img"};
 const std::vector<std::string_view> COVER_TAGS = {"image"};
-const std::vector<std::string_view> SKIP_TAGS = {"title", "style","hidden"};
+const std::vector<std::string_view> SKIP_TAGS = {"title", "style","hidden","script"};
 const std::vector<std::string_view> BODY_TAGS = {"body"};
 const std::vector<std::string_view> LINK_TAGS = {"link"};
 
@@ -156,7 +156,7 @@ bool HtmlParser::VisitEnter(const tinyxml2::XMLElement &element, const tinyxml2:
             contentParser->parseOverflowedImage(styleHierarchy.back(), drawPage);
         }
 
-        if(image.cached==false) cachedImages.emplace_back(imagePath,image.imageHeight,image.imageWidth);
+        if(image.cached==false) cachedImages.emplace_back(imagePath,image.imageWidth,image.imageHeight);
         this->styleHierarchy.pop_back();
       }
 
@@ -358,6 +358,7 @@ bool HtmlParser::VisitEnter(const tinyxml2::XMLElement &element, const tinyxml2:
 /// Visit a text node.
 bool HtmlParser::Visit(const tinyxml2::XMLText &text)
 {
+  
   if(doneParsing) return false;
   std::string textValue = text.Value();
   if(this->precedingWhiteSpace)
@@ -381,9 +382,14 @@ bool HtmlParser::Visit(const tinyxml2::XMLText &text)
   }
   if(this->currentPage<this->targetPage || this->indexingMode) currentElementIndex++;
 
-
-  std::vector<int> intArray = decodeHtmlEntities(utf8ToCodePoints(textValue));
+  // ESP_LOGI(TAG, "txt: %s", textValue.c_str());
+  // vTaskDelay(10);
   
+  std::vector<int> intArray;
+  if(encoding==UTF8) intArray = decodeHtmlEntities(utf8ToCodePoints(textValue));
+  else if(encoding==ISO8859_1) intArray = decodeHtmlEntities(ISO8859_1ToCodePoints(textValue));
+
+
   bool drawPage = (this->currentPage==this->targetPage || this->currentPage==this->targetPage+1);
   this->contentParser->parseTextBlock(intArray,this->isNewLine,styleHierarchy.back(),drawPage);
   
@@ -471,9 +477,47 @@ bool HtmlParser::VisitExit(const tinyxml2::XMLElement &element)
   return true;
 }
 
+Encoding HtmlParser::detectEncoding(const char* html, size_t length)
+{
+    std::string raw(html, length);
+
+    size_t start = raw.find("<?xml");
+    if (start == std::string::npos) {
+        return UTF8; // XML default
+    }
+
+    size_t end = raw.find("?>", start);
+    if (end == std::string::npos) {
+        return UTF8;
+    }
+
+    std::string declaration = raw.substr(start, end - start);
+
+    // Encoding names are ASCII; normalize to lowercase.
+    std::transform(declaration.begin(), declaration.end(),
+                   declaration.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+
+    if (declaration.find("windows-1252") != std::string::npos ||
+        declaration.find("cp1252") != std::string::npos) {
+          ESP_LOGI(TAG, "Detected iso8859-1 encoding");
+        return ISO8859_1;
+        
+    }
+
+    if (declaration.find("iso-8859-1") != std::string::npos ||
+        declaration.find("iso8859-1") != std::string::npos) {
+          ESP_LOGI(TAG, "Detected iso8859-1 encoding");
+        return ISO8859_1;
+    }
+ESP_LOGI(TAG, "Detected UTF8");
+    return UTF8;
+}
+
 void HtmlParser::parse()
 {
   tinyxml2::XMLDocument doc(false, tinyxml2::PEDANTIC_WHITESPACE);
+  encoding = detectEncoding(htmlRaw,htmlLength);
   doc.Parse(htmlRaw, htmlLength);
   doc.Accept(this);
 }

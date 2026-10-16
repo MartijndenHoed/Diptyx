@@ -1050,6 +1050,17 @@ const XMLElement* XMLNode::FirstChildElement( const char* name ) const
     return 0;
 }
 
+const XMLElement* XMLNode::FirstChildElementIgnoreNamespace( const char* name ) const
+{
+    for( const XMLNode* node = _firstChild; node; node = node->_next ) {
+        const XMLElement* element = node->ToElementWithNameIgnoreNamespace( name );
+        if ( element ) {
+            return element;
+        }
+    }
+    return 0;
+}
+
 
 const XMLElement* XMLNode::LastChildElement( const char* name ) const
 {
@@ -1067,6 +1078,17 @@ const XMLElement* XMLNode::NextSiblingElement( const char* name ) const
 {
     for( const XMLNode* node = _next; node; node = node->_next ) {
         const XMLElement* element = node->ToElementWithName( name );
+        if ( element ) {
+            return element;
+        }
+    }
+    return 0;
+}
+
+const XMLElement* XMLNode::NextSiblingElementIgnoreNamespace( const char* name ) const
+{
+    for( const XMLNode* node = _next; node; node = node->_next ) {
+        const XMLElement* element = node->ToElementWithNameIgnoreNamespace( name );
         if ( element ) {
             return element;
         }
@@ -1244,6 +1266,43 @@ const XMLElement* XMLNode::ToElementWithName( const char* name ) const
     if ( XMLUtil::StringEqual( element->Name(), name ) ) {
        return element;
     }
+    return 0;
+}
+
+const XMLElement* XMLNode::ToElementWithNameIgnoreNamespace(const char* name) const
+{
+    const XMLElement* element = this->ToElement();
+
+    if (element == 0) {
+        return 0;
+    }
+
+    if (name == 0) {
+        return element;
+    }
+
+    const char* elementName = element->Name();
+
+    // Ignore the namespace prefix in the element name.
+    const char* elementLocalName = strrchr(elementName, ':');
+    if (elementLocalName != 0) {
+        elementLocalName++;
+    } else {
+        elementLocalName = elementName;
+    }
+
+    // Ignore the namespace prefix in the requested name.
+    const char* requestedLocalName = strrchr(name, ':');
+    if (requestedLocalName != 0) {
+        requestedLocalName++;
+    } else {
+        requestedLocalName = name;
+    }
+
+    if (XMLUtil::StringEqual(elementLocalName, requestedLocalName)) {
+        return element;
+    }
+
     return 0;
 }
 

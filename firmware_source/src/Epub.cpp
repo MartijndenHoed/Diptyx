@@ -190,7 +190,7 @@ while (cover)
     return false;
   }
   // create a mapping from id to file name
-  auto item = manifest->FirstChildElement("item");
+  auto item = manifest->FirstChildElementIgnoreNamespace("item");
   std::map<std::string, std::string> items;
   std::string tocID;
 
@@ -218,7 +218,7 @@ while (cover)
         m_nav_item = href;
     }
 
-    item = item->NextSiblingElement("item");
+    item = item->NextSiblingElementIgnoreNamespace("item");
   }
   // find the spine
   auto spine = package->FirstChildElement("spine");

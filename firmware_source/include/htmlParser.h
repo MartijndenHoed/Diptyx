@@ -15,6 +15,11 @@
 #include <string_view>
 #include "bookHandler.h"
 
+enum Encoding {
+    UTF8,
+    ISO8859_1
+};
+
 class HtmlParser : public tinyxml2::XMLVisitor
 {
 private:
@@ -26,6 +31,7 @@ private:
     Epub *epub = nullptr;
     unsigned char *leftScreenBuffer;
     unsigned char *rightScreenBuffer;
+    Encoding encoding = UTF8;
 
 
 
@@ -40,6 +46,7 @@ public:
     bool Visit(const tinyxml2::XMLText &text);
     bool VisitExit(const tinyxml2::XMLElement &element);
     void parse();
+    Encoding detectEncoding(const char* html, size_t length);
     Renderer* renderer = nullptr;
     ContentParser* contentParser = nullptr;
     void emptyTextOverflow();

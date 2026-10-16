@@ -212,7 +212,7 @@ void Image::prepare()
         uint8_t work_buf[WORK_BUF_SIZE];
         JDEC jd;
 
-        if (!loadData(1024)) {
+        if (!loadData(256)) {
             ESP_LOGE(TAG, "Failed to load JPEG header");
             return;
         }

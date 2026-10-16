@@ -20,8 +20,10 @@ typedef unsigned long   UDOUBLE;
 }
 
 int utf8ToCodePoints(const char* utf8, int* out, int maxOutLen);
+std::vector<int> ISO8859_1ToCodePoints(const std::string& input);
 std::vector<int> utf8ToCodePoints(const std::string& utf8);
 std::vector<int> decodeHtmlEntities(const std::vector<int>& input);
+
 
 class Renderer {
 public:
