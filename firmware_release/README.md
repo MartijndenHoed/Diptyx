@@ -2,7 +2,7 @@ Here, the compiled Diptyx firmware can be found.
 
 To enter flash mode on your device, make sure it is fully turned off for at least 20 seconds. Then, press and hold the center joystick whilst connecting the device with a USB type-C cable to your pc. 
 
-From there, you can flash the firmware binary with your preferred ESP32 flasher (such as https://www.espboards.dev/tools/program/), in a browser that supports WebSerial (Chrome, Edge, Opera)
+From there, you can flash the firmware binary with your preferred ESP32 flasher (such as https://www.espboards.dev/tools/program/), in a browser that supports WebSerial (Chrome, Edge)
 
 
 
