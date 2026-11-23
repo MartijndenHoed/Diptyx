@@ -10,17 +10,18 @@
 #include <algorithm>
 #include "device.h"
 #include "esp_log.h"
+
 static const char *TAG = "Bookhandler";
 
 RTC_NOINIT_ATTR char rtc_currently_parsing_book[MAX_BOOK_NAME] = {0};
 
-bool ends_with_epub(const char *filename) {
+bool checkValidFileExtension(const char *filename) {
     if (!filename || filename[0] == '.') {
         return false;   // reject hidden files
     }
 
     const char *ext = strrchr(filename, '.');
-    return ext && strcasecmp(ext, ".epub") == 0;
+    return ext && (strcasecmp(ext, ".epub") == 0 || strcasecmp(ext, ".txt")==0);
 }
 
 
@@ -77,11 +78,12 @@ static void ensureBooksDir() {
     }
 }
 
-Book::Book(std::string path, std::string title, std::string author, int totalPageCount)
+Book::Book(std::string path, std::string fileName, std::string title, std::string author, int totalPageCount)
 {
     this->author = std::move(author);
     this->title = std::move(title);
     this->path = std::move(path);
+    this->fileName = std::move(fileName);
     this->currentPage = 0;
     this->totalPageCount = totalPageCount;
     this->chapterCount = 0;
@@ -90,6 +92,7 @@ Book::Book(std::string path, std::string title, std::string author, int totalPag
 }
 
 Book::Book(std::string path,
+           std::string fileName,
            std::string title,
            std::string author,
            int totalPageCount,
@@ -98,6 +101,7 @@ Book::Book(std::string path,
            const RenderSettings& renderSettings)
 {
     this->path = std::move(path);
+    this->fileName = std::move(fileName);
     this->title = std::move(title);
     this->author = std::move(author);
     this->totalPageCount = totalPageCount;
@@ -107,12 +111,25 @@ Book::Book(std::string path,
     this->renderSettings = renderSettings;
 }
 
+Book::Book(const Book& other)
+{
+    this->path = other.path;
+    this->fileName = other.fileName;
+    this->title = other.title;
+    this->author = other.author;
+    this->totalPageCount = other.totalPageCount;
+    this->chapterCount = other.chapterCount;
+    this->chapterPageCounts = other.chapterPageCounts;
+    this->currentPage = other.currentPage;
+    this->renderSettings = other.renderSettings;
+}
+
 Book::~Book()
 {
     // nothing special; BookHandler will own/free Book pointers
 }
 
-Author::Author(std::string name)
+Folder::Folder(std::string name)
 {
     this->name = name;
 }
@@ -161,6 +178,7 @@ void BookHandler::initFilesystem() {
 std::string Book::toJSON() const {
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "path", path.c_str());
+    cJSON_AddStringToObject(root, "fileName", fileName.c_str());
     cJSON_AddStringToObject(root, "title", title.c_str());
     cJSON_AddStringToObject(root, "author", author.c_str());
     cJSON_AddNumberToObject(root, "totalPageCount", totalPageCount);
@@ -225,6 +243,7 @@ Book *Book::fromJSON(const std::string &json) {
     if (!root) return nullptr;
 
     cJSON *jpath = cJSON_GetObjectItem(root, "path");
+    cJSON *jfileName = cJSON_GetObjectItem(root, "fileName");
     cJSON *jtitle = cJSON_GetObjectItem(root, "title");
     cJSON *jauthor = cJSON_GetObjectItem(root, "author");
     cJSON *jpages = cJSON_GetObjectItem(root, "totalPageCount");
@@ -235,8 +254,10 @@ Book *Book::fromJSON(const std::string &json) {
         return nullptr;
     }
 
-    Book *book = new Book(jpath->valuestring, jtitle->valuestring, jauthor->valuestring, jpages->valueint);
-
+    Book *book;
+    if(cJSON_IsString(jfileName)) book = new Book(jpath->valuestring, jfileName->valuestring,jtitle->valuestring, jauthor->valuestring, jpages->valueint);
+    else book = new Book(jpath->valuestring, jpath->valuestring,jtitle->valuestring, jauthor->valuestring, jpages->valueint);
+    
     cJSON *jchapterCount = cJSON_GetObjectItem(root, "chapterCount");
     cJSON *jchapterPages = cJSON_GetObjectItem(root, "chapterPageCounts");
     cJSON *jread = cJSON_GetObjectItem(root, "currentPage");
@@ -454,7 +475,7 @@ void BookHandler::saveBook(Book *book)
         }
     }
 
-    std::string filename = std::string(basePath) + "/" + book->path + ".json";
+    std::string filename = std::string(basePath) + "/" + book->fileName + ".json";
     std::string jsonStr = book->toJSON();
 
     FILE *f = fopen(filename.c_str(), "w");
@@ -623,7 +644,7 @@ void BookHandler::transferDataToFlash()
 
 void BookHandler::listBooks(void)
 {
-    if(authorList.empty()) authorList.emplace_back("Favorite books");
+    //if(authorList.empty()) authorList.emplace_back("Favorite books");
     const char *sdPath = "/sdcard";
 
     DIR *dir = opendir(sdPath);
@@ -633,7 +654,7 @@ void BookHandler::listBooks(void)
     }
 
     Device &dev = Device::getInstance();
-    if (dev.activeBookPath.empty()) dev.activeBookIndex = 0;
+    // if (dev.activeBookPath.empty()) dev.activeBookIndex = 0;
 
     // Step 1: Load all cached books from LittleFS
     loadBooks();  // fills indexedBooks with any JSON files found
@@ -646,194 +667,395 @@ void BookHandler::listBooks(void)
         dev.renderSettings.marginsVertical
     };
 
-    // Step 2: Scan /sdcard and process each EPUB
+    // Step 2: Recursively scan /sdcard and process each EPUB
     std::vector<std::string> foundPaths;
-    struct dirent *entry;
-    while ((entry = readdir(dir)) != NULL) {
-        if (entry->d_type == DT_DIR) continue;
-        if (!ends_with_epub(entry->d_name)) continue;
-        std::string fileName(entry->d_name);
-        foundPaths.push_back(fileName);
 
-        Book *book = nullptr;
-        auto it = indexedBooks.find(fileName);
+    std::function<void(const std::string&)> scanDirectory;
 
-        if (it != indexedBooks.end()) {
-            // Cached book exists
-            book = it->second;
-            this->bookList.push_back(book);  
-        } else {
-            // New book -> index and save
-            std::string fullPath = std::string(sdPath) + "/" + fileName;
-            if (rtc_isCurrentlyParsing(fileName)) { //if the book is malformed and somehow crashes the loader, this is triggered
-                //notify the user about the error, and store the epub as malformed
-                dev.notificationHandler->drawErrorNotification(fileName);
-                book = new Book(fileName,
-                                    fileName,
-                                    std::string("error during parsing"),
-                                    0,
-                                    0,
-                                    std::vector<int> {},
-                                    currentRS);
-                book->badParse = true;
+    scanDirectory = [&](const std::string& directoryPath)
+    {
+        DIR* dir = opendir(directoryPath.c_str());
+
+        if (dir == nullptr)
+        {
+            ESP_LOGE(TAG, "Failed to open directory: %s", directoryPath.c_str());
+            return;
+        }
+
+        struct dirent* entry;
+
+        while ((entry = readdir(dir)) != nullptr)
+        {
+            std::string entryName(entry->d_name);
+
+            // Skip the current and parent directory entries
+            if (entryName == "." || entryName == "..")
+                continue;
+
+            std::string fullPath = directoryPath + "/" + entryName;
+
+            // Determine whether this entry is a directory
+            bool isDirectory = (entry->d_type == DT_DIR);
+
+            // DT_UNKNOWN can occur on filesystems that don't provide d_type.
+            // Fall back to stat() to determine the entry type.
+            if (entry->d_type == DT_UNKNOWN)
+            {
+                struct stat entryStat;
+
+                if (stat(fullPath.c_str(), &entryStat) != 0)
+                {
+                    ESP_LOGW(TAG, "Failed to stat: %s", fullPath.c_str());
+                    continue;
+                }
+
+                isDirectory = S_ISDIR(entryStat.st_mode);
+            }
+
+            if (isDirectory)
+            {
+                // Do not index these directories, at any depth
+                if (entryName == "fonts" || entryName == "book_data")
+                    continue;
+
+                // Recursively scan subdirectories
+                scanDirectory(fullPath);
+                continue;
+            }
+
+            // Only index book files
+            if (!checkValidFileExtension(entryName.c_str()))
+                continue;
+
+            // Store the full path and filename separately
+            const std::string fileName = entryName;
+
+            foundPaths.push_back(fullPath);
+
+            Book* book = nullptr;
+
+            // Use the full path as the cache key to avoid filename collisions
+            auto it = indexedBooks.find(fullPath);
+
+            if (it != indexedBooks.end())
+            {
+                // Cached book exists
+                book = it->second;
                 this->bookList.push_back(book);
-                indexedBooks[fileName] = book;
-                // Save immediately to LittleFS
-                saveBook(book);
-                rtc_clearCurrentlyParsing();
-                vTaskDelay(100);
             }
             else
             {
-                rtc_setCurrentlyParsing(fileName);
-                Epub *epub = new Epub(fullPath);
-                ESP_LOGI(TAG, "Indexing new book: %s", fullPath.c_str());
-                vTaskDelay(20);
+                for (auto it = indexedBooks.begin(); it != indexedBooks.end(); it++)
+                {
+                    if(fileName == it->second->fileName)
+                    {
+                        book = it->second;
+                        Book* newBook = new Book(*book);
+                        newBook->path = fullPath;
+                        this->bookList.push_back(newBook);
+                        break;
+                    }
+                }
+                if(book) continue;
+                if(Device::getInstance().safeBoot) continue;
 
-                if (epub->load()) {
-                    std::string title = epub->get_title();
-                    std::string author = epub->get_author();
-                    dev.notificationHandler->drawIndexingNotification(title);
+                if (rtc_isCurrentlyParsing(fullPath))
+                {
+                    // The previous attempt to parse this book crashed.
+                    dev.notificationHandler->drawErrorNotification(fileName);
 
-                    Reader reader;
-                    book = new Book(fileName,
-                                    title,
-                                    author,
-                                    0,
-                                    0,
-                                    std::vector<int> {},
-                                    currentRS);
-                    book->renderSettings.fontSize=-1; //change this to some bad value so it is forced to re-index on opening
-                    //reader.init(book, nullptr);
-                    //reader.indexPages(); //don't init here actually, it is done upon first opening
+                    book = new Book(
+                        fullPath,
+                        fileName,
+                        fileName,
+                        "error during parsing",
+                        0,
+                        0,
+                        std::vector<int>{},
+                        currentRS
+                    );
+
+                    book->badParse = true;
+
                     this->bookList.push_back(book);
-                    indexedBooks[fileName] = book;
+                    indexedBooks[fullPath] = book;
 
                     // Save immediately to LittleFS
                     saveBook(book);
+
+                    rtc_clearCurrentlyParsing();
+                    vTaskDelay(pdMS_TO_TICKS(100));
                 }
                 else
                 {
-                    //if the epub loading is unsuccessful, we also store the epub as malformed and inform the user
-                    dev.notificationHandler->drawErrorNotification(fileName);
-                    book = new Book(fileName,
-                                        fileName,
-                                        std::string("error during parsing"),
-                                        0,
-                                        0,
-                                        std::vector<int> {},
-                                        currentRS);
-                    book->badParse = true;
-                    this->bookList.push_back(book);
-                    indexedBooks[fileName] = book;
-                    // Save immediately to LittleFS
-                    saveBook(book);
-                    vTaskDelay(100);
+                    rtc_setCurrentlyParsing(fullPath);
+
+                    std::unique_ptr<FileParser> fileParser =
+                        createFileParser(fullPath);
+
+                    ESP_LOGI(TAG, "Indexing new book: %s", fullPath.c_str());
+
+                    vTaskDelay(pdMS_TO_TICKS(20));
+
+                    book = new Book(
+                        fullPath,
+                        fileName,
+                        "",
+                        "",
+                        0,
+                        0,
+                        std::vector<int>{},
+                        currentRS
+                    );
+
+                    if (fileParser && fileParser->load(book))
+                    {
+                        dev.notificationHandler->drawIndexingNotification(
+                            book->title
+                        );
+
+                        // Force re-indexing when the book is opened
+                        book->renderSettings.fontSize = -1;
+
+                        this->bookList.push_back(book);
+                        indexedBooks[fullPath] = book;
+
+                        // Save immediately to LittleFS
+                        saveBook(book);
+                    }
+                    else
+                    {
+                        // Parsing failed; retain the entry as malformed
+                        dev.notificationHandler->drawErrorNotification(fileName);
+
+                        book->title = fileName;
+                        book->author = "error during parsing";
+                        book->badParse = true;
+
+                        this->bookList.push_back(book);
+                        indexedBooks[fullPath] = book;
+
+                        // Save immediately to LittleFS
+                        saveBook(book);
+
+                        vTaskDelay(pdMS_TO_TICKS(100));
+                    }
+
+                    rtc_clearCurrentlyParsing();
                 }
-                delete epub;
-                rtc_clearCurrentlyParsing();
             }
+
+            // Initialize the active book path if necessary
+            if (dev.activeBookPath.empty())
+                dev.activeBookPath = fullPath;
         }
 
-        if (dev.activeBookPath.empty()) dev.activeBookPath = fileName;
-    }
-    closedir(dir);
-    // Step 3: Prune metadata for missing books (not found in /sdcard)
-const char *basePath =
-    Device::getInstance().deviceSettings.storeDataOnSD
-        ? "/sdcard/book_data"
-        : "/littlefs/books";
+        closedir(dir);
+    };
 
-for (auto it = indexedBooks.begin(); it != indexedBooks.end();) {
-    if (std::find(foundPaths.begin(), foundPaths.end(), it->first) == foundPaths.end()) {
+    // Start scanning from the SD card root
+    scanDirectory(sdPath);
 
-        if (it->second->badParse) {
-            std::string metaFile =
-                std::string(basePath) + "/" + it->first + ".json";
 
-            if (unlink(metaFile.c_str()) == 0) {
-                ESP_LOGI(TAG, "Pruned stale bad-parse metadata: %s", metaFile.c_str());
-            } else {
-                ESP_LOGW(TAG, "Failed to remove stale bad-parse metadata: %s", metaFile.c_str());
-            }
-        }
 
-        delete it->second;
-        it = indexedBooks.erase(it);
-    } else {
-        ++it;
-    }
-}
+    // Step 3: Prune metadata for missing books (not found on SD card)
+    const char* basePath =
+        Device::getInstance().deviceSettings.storeDataOnSD
+            ? "/sdcard/book_data"
+            : "/littlefs/books";
 
-    // Step 4: Sort books into authorList
-    for (Book* b : bookList) {
-        Author* foundAuthor = nullptr;
-        int currentAuthorIndex = 0;
-        for (auto& a : authorList) {
-            if (a.name == b->author) {
-                foundAuthor = &a;
-                break;
-            }
-            currentAuthorIndex++;
-        }
-
-        if (foundAuthor) {
-            foundAuthor->bookList.push_back(b);
-            if (b->author == dev.activeAuthorName) {
-                dev.activeAuthorIndex = currentAuthorIndex;
-            }
-        } else {
-            authorList.emplace_back(b->author);
-            authorList.back().bookList.push_back(b);
-            if (b->author == dev.activeAuthorName) {
-                dev.activeAuthorIndex = authorList.size() - 1;
-            }
-            foundAuthor = &authorList.back();
-        }
-
-        if (dev.activeBookPath == b->path) {
-            dev.activeBookIndex = foundAuthor->bookList.size() - 1;
-            if(dev.activeAuthorIndex==-1) //this book is the current book, but it's author doesn't match the current author, so it is in the favorites
-            {
-                dev.activeBookIndex = authorList[0].bookList.size(); //the book is the last entry in the favorites list, but not yet added, so size+1-1
-                dev.activeAuthorIndex = 0;
-                dev.activeAuthorName = authorList[0].name;
-            }
-        }
-
-        if(b->favorite)
-        {
-            authorList[0].bookList.push_back(b);
-        }
-    }
-
-    if(dev.state == Device::State::simpleReader) 
+    for (auto it = indexedBooks.begin(); it != indexedBooks.end();)
     {
-        dev.activeBookIndex = 0;
-        dev.activeAuthorIndex = 0;
-        return; //if we boot into the simplereader we don't need to check the activebook
+        // The map key is now the full book path
+        if (std::find(foundPaths.begin(), foundPaths.end(), it->first) == foundPaths.end())
+        {
+            Book* book = it->second;
+
+            if (book->badParse)
+            {
+                // Metadata is still keyed by filename
+                std::string metaFile =
+                    std::string(basePath) + "/" + book->fileName + ".json";
+
+                if (unlink(metaFile.c_str()) == 0)
+                {
+                    ESP_LOGI(TAG, "Pruned stale bad-parse metadata: %s", metaFile.c_str());
+                }
+                else
+                {
+                    ESP_LOGW(TAG, "Failed to remove stale bad-parse metadata: %s", metaFile.c_str());
+                }
+            }
+
+            delete book;
+            it = indexedBooks.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
     }
 
-    // Step 5: Fallback active indices if missing
-    if (dev.activeBookIndex == -1 && !bookList.empty()) {
-        dev.activeBookIndex = 0;
-        dev.activeBookPath = bookList[0]->path;
+authorList.clear();
+folderList.clear();
+alphabeticList.clear();
+Folder *parseErrorFolder = new Folder("*Error during parsing");
+
+// Find an existing group or create a new one
+auto getOrCreateGroup = [](std::vector<Folder>& groups,
+                           const std::string& name) -> Folder&
+{
+    for (auto& group : groups)
+    {
+        if (group.name == name)
+            return group;
     }
-    if (dev.activeAuthorIndex == -1 && !authorList.empty()) {
-        dev.activeAuthorIndex = 0;
-        dev.activeAuthorName = authorList[0].name;
+
+    groups.emplace_back(name);
+    return groups.back();
+};
+
+// Organize books into all three lists
+    for (Book* b : bookList)
+    {
+        if (b == nullptr)
+            continue;
+
+        if(b->badParse)
+        {
+            parseErrorFolder->bookList.push_back(b);
+            continue;
+        }
+
+        // Group by author
+        getOrCreateGroup(authorList, b->author).bookList.push_back(b);
+
+        // Group by parent folder, relative to /sdcard
+        std::string folderName = "Root";
+        const std::string root = "/sdcard/";
+        const std::string& path = b->path;
+
+        size_t lastSlash = path.find_last_of('/');
+
+        if (lastSlash != std::string::npos)
+        {
+            std::string parentPath = path.substr(0, lastSlash);
+
+            if (parentPath == "/sdcard")
+            {
+                folderName = "Root";
+            }
+            else if (parentPath.compare(0, root.size(), root) == 0)
+            {
+                folderName = parentPath.substr(root.size());
+            }
+            else
+            {
+                folderName = parentPath;
+            }
+        }
+
+        getOrCreateGroup(folderList, folderName).bookList.push_back(b);
+
+        // Group by the first letter of the title
+        std::string letter = "#";
+
+        if (!b->title.empty())
+        {
+            unsigned char firstChar =
+                static_cast<unsigned char>(b->title[0]);
+
+            if (std::isalpha(firstChar))
+            {
+                letter = std::string(
+                    1, static_cast<char>(std::toupper(firstChar)));
+            }
+        }
+
+        getOrCreateGroup(alphabeticList, letter).bookList.push_back(b);
     }
+    if(parseErrorFolder->bookList.size()>0)
+    {
+        alphabeticList.push_back(*parseErrorFolder);
+        authorList.push_back(*parseErrorFolder);
+        folderList.push_back(*parseErrorFolder);
+    }
+
+    // Step 5: Restore the active folder and book
+
+    Book* activeBook = findBookByPath(dev.activeBookPath);
+
+    // dev.activeFolder = nullptr;
+
+    // if (activeBook != nullptr)
+    // {
+    //     dev.activeFolder = getParentFolder(activeBook);
+    // }
+
+    // If the active book or its group cannot be found,
+    // leave activeFolder as nullptr.
 }
+
+Folder* BookHandler::getParentFolder(Book* book)
+{
+    if (book == nullptr)
+        return nullptr;
+
+    auto& device = Device::getInstance();
+
+    std::vector<Folder>* groups = nullptr;
+
+    switch (device.deviceSettings.bookSortingMethod)
+    {
+        case BookSortingMethod::Author:
+            groups = &authorList;
+            break;
+
+        case BookSortingMethod::Folder:
+            groups = &folderList;
+            break;
+
+        case BookSortingMethod::Alphabetical:
+            groups = &alphabeticList;
+            break;
+
+        default:
+            return nullptr;
+    }
+
+    for (auto& folder : *groups)
+    {
+        for (Book* candidate : folder.bookList)
+        {
+            if (candidate == book)
+                return &folder;
+        }
+    }
+
+    return nullptr;
+}
+
+Book* BookHandler::findBookByPath(std::string bookPath)
+{
+    auto it = indexedBooks.find(bookPath);
+
+    if (it != indexedBooks.end())
+        return it->second;
+
+    return nullptr;
+}
+
+
 
 void BookHandler::refreshFavorites()
 {
-    authorList[0].bookList.clear();
-    for (Book* b : bookList) {
-        if(b->favorite)
-        {
-            authorList[0].bookList.push_back(b);
-        }
-    }
+    // authorList[0].bookList.clear();
+    // for (Book* b : bookList) {
+    //     if(b->favorite)
+    //     {
+    //         authorList[0].bookList.push_back(b);
+    //     }
+    // }
 }
 
 void BookHandler::updateReadPage(const std::string &bookPath, int newPageCount) {

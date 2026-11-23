@@ -74,6 +74,7 @@ void Device::saveSettings() {
     cJSON_AddNumberToObject(device, "sunlightFullRefresh", deviceSettings.sunlightFullRefresh);
     cJSON_AddNumberToObject(device, "vcomLeft", deviceSettings.vcomLeft);
     cJSON_AddNumberToObject(device, "vcomRight", deviceSettings.vcomRight);
+    cJSON_AddNumberToObject(device, "bookSortingMethod", static_cast<int> (deviceSettings.bookSortingMethod));
     cJSON_AddItemToObject(root, "deviceSettings", device);
 
     
@@ -183,6 +184,8 @@ void Device::loadSettings() {
                     deviceSettings.vcomLeft = j->valueint;
                 if ((j = cJSON_GetObjectItem(device, "vcomRight")) && cJSON_IsNumber(j))
                     deviceSettings.vcomRight = j->valueint;
+                if ((j = cJSON_GetObjectItem(device, "bookSortingMethod")) && cJSON_IsNumber(j))
+                    deviceSettings.bookSortingMethod = static_cast<BookSortingMethod> (j->valueint);
                 }
 
             cJSON_Delete(root);
@@ -361,7 +364,7 @@ void Device::displayOffScreen(std::string message)
         left_image.floydSteinbergDither();
         renderer->drawImage(left_image,0,0);
         
-        renderer->drawSquare(0,0,(message.length()+2)*GLYPH_HEIGHT/2,2*GLYPH_WIDTH,false);
+        renderer->drawRectangle(0,0,(message.length()+2)*GLYPH_HEIGHT/2,2*GLYPH_WIDTH,true);
         renderer->drawString(GLYPH_HEIGHT/2,GLYPH_WIDTH/2,message,1,true,false,false);
 
         renderer->framebuffer = menuHandler->rightPageFrameBuffer;
@@ -376,38 +379,38 @@ void Device::displayOffScreen(std::string message)
     } 
     else if(Device::getInstance().deviceSettings.standbyScreen==1 && Device::getInstance().state==Device::State::Reading) //Idle screen 2: the cover of the current book
     {
-        ESP_LOGI(TAG, "data: %s",reader->epub->get_cover_image_item().c_str());
-        ESP_LOGI(TAG, "data: %s",reader->epub->get_path().c_str());
+        //ESP_LOGI(TAG, "data: %s",reader->epub->get_cover_image_item().c_str());
+        //ESP_LOGI(TAG, "data: %s",reader->epub->get_path().c_str());
         renderer->framebuffer = reader->leftPageFrameBuffer; //set the renderer framebuffer to the current left page, just in case the cover can't be loaded
-        Image cover_image = Image(reader->epub->get_cover_image_item(),reader->epub->get_path());
+        Image cover_image = Image(reader->fileParser->getCoverImagePath(),reader->fileParser->getPath());
         cover_image.prepare();
         cover_image.decodeAndScale(EPD_HEIGHT,EPD_WIDTH);
         cover_image.floydSteinbergDither();
         renderer->drawImage(cover_image,0,0);
         
-        renderer->drawSquare(0,0,(message.length()+2)*GLYPH_HEIGHT/2,2*GLYPH_WIDTH,false);
+        renderer->drawRectangle(0,0,(message.length()+2)*GLYPH_HEIGHT/2,2*GLYPH_WIDTH,true);
         renderer->drawString(GLYPH_HEIGHT/2,GLYPH_WIDTH/2,message,1,true,false,false);
         renderer->epd.forceRefresh();
         renderer->epd.DisplayPicture(true,renderer->framebuffer);
     }
     else if(Device::getInstance().deviceSettings.standbyScreen==1 && Device::getInstance().state==Device::State::simpleReader) //Idle screen 2: the cover of the current book
     {
-        ESP_LOGI(TAG, "data: %s",simpleReader->epub->get_cover_image_item().c_str());
-        ESP_LOGI(TAG, "data: %s",simpleReader->epub->get_path().c_str());
+        //ESP_LOGI(TAG, "data: %s",simpleReader->epub->get_cover_image_item().c_str());
+        //ESP_LOGI(TAG, "data: %s",simpleReader->epub->get_path().c_str());
         renderer->framebuffer = reader->leftPageFrameBuffer; //set the renderer framebuffer to the current left page, just in case the cover can't be loaded
-        Image cover_image = Image(simpleReader->epub->get_cover_image_item(),simpleReader->epub->get_path());
+        Image cover_image = Image(simpleReader->fileParser->getCoverImagePath(),simpleReader->fileParser->getPath());
         cover_image.prepare();
         cover_image.decodeAndScale(EPD_HEIGHT,EPD_WIDTH);
         cover_image.floydSteinbergDither();
         renderer->drawImage(cover_image,0,0);
         
-        renderer->drawSquare(0,0,(message.length()+2)*GLYPH_HEIGHT/2,2*GLYPH_WIDTH,false);
+        renderer->drawRectangle(0,0,(message.length()+2)*GLYPH_HEIGHT/2,2*GLYPH_WIDTH,true);
         renderer->drawString(GLYPH_HEIGHT/2,GLYPH_WIDTH/2,message,1,true,false,false);
         renderer->epd.forceRefresh();
         renderer->epd.DisplayPicture(true,renderer->framebuffer);
     }
     else { //Idle screen 3: a small standby indicator on the bottom left
-        renderer->drawSquare(0,0,(message.length()+2)*GLYPH_HEIGHT/2,2*GLYPH_WIDTH,false);
+        renderer->drawRectangle(0,0,(message.length()+2)*GLYPH_HEIGHT/2,2*GLYPH_WIDTH,true);
         renderer->drawString(GLYPH_HEIGHT/2,GLYPH_WIDTH/2,message,1,true,false,false);
         renderer->drawScreenPartial(true,0,0,(message.length()+2)*GLYPH_HEIGHT/2,2*GLYPH_WIDTH);
     }
@@ -435,7 +438,7 @@ void Device::saveAppState() {
 
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "activeBookPath", Device::getInstance().activeBookPath.c_str());
-    cJSON_AddStringToObject(root, "activeAuthorName", Device::getInstance().activeAuthorName.c_str());
+    cJSON_AddStringToObject(root, "recentBookPath", Device::getInstance().recentBookPath.c_str());
     cJSON_AddNumberToObject(root, "state", (int) Device::getInstance().state);
 
     char *jsonStr = cJSON_PrintUnformatted(root);
@@ -468,17 +471,17 @@ void Device::loadAppState() {
         cJSON *root = cJSON_Parse(buffer.data());
         if (root) {
             cJSON *jpath = cJSON_GetObjectItem(root, "activeBookPath");
-            cJSON *jauthor = cJSON_GetObjectItem(root, "activeAuthorName");
             cJSON *jstate = cJSON_GetObjectItem(root, "state");
+            cJSON *jrecent = cJSON_GetObjectItem(root, "recentBookPath");
 
             if (cJSON_IsString(jpath)) {
                 Device::getInstance().activeBookPath = jpath->valuestring;
             }
-            if (cJSON_IsString(jauthor)) {
-                Device::getInstance().activeAuthorName = jauthor->valuestring;
-            }
             if (cJSON_IsNumber(jstate)) {
                 Device::getInstance().state = (Device::State) jstate->valueint;  
+            }
+            if (cJSON_IsString(jrecent)) {
+                Device::getInstance().recentBookPath = jrecent->valuestring;  
             }
 
             cJSON_Delete(root);

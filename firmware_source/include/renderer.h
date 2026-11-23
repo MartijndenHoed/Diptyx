@@ -31,12 +31,15 @@ public:
     void renderChecker(void);
     void drawScreen(bool screenID);
     void drawClearScreen(bool screenID);
-    void drawSquare(int startx, int starty, int lengthx, int lengthy, bool value);
+    void drawRectangle(int startx, int starty, int lengthx, int lengthy, bool ink);
     void drawPaddedBox(int startx, int starty, int lengthx, int lengthy, int padding, bool value);
     void drawTextBox(int y, std::string line1, bool line1Bold,bool inverted=false);
     void drawTextBox(int y, std::string line1, bool line1Bold,std::string line2, bool line2Bold,bool inverted=false);
     void drawTextBox(int y, std::string line1, bool line1Bold,std::string line2, bool line2Bold,std::string line3, bool line3Bold,bool inverted=false);
-    void drawPixel(int x, int y, bool value);
+    void drawPixel(int x, int y, bool ink);
+    void drawRightArrow(int xCenter, int yCenter, int armLength, int height, int thickness, bool ink);
+    void drawDownArrow(int xCenter, int yCenter, int armLength, int height, int thickness, bool ink);
+    void drawUpArrow(int xCenter, int yCenter, int armLength, int height, int thickness, bool ink);
     int drawCharacter(int x, int y, int UTF8Index, bool bold=false,bool italics=false,int size=1,bool color = true, bool uniFont = true);
     void drawText(int x, int y, int* text, int text_length, int size, bool* boldMask=nullptr,bool* italicsMask=nullptr);
     void drawText(int x, int y, int* text, int text_length, int size, bool bold,bool italics);

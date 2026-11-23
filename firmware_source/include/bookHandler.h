@@ -3,7 +3,6 @@
 #include <list>
 #include <vector>
 #include <string.h>
-#include <Epub.h>
 #include <dirent.h>
 #include "esp_log.h"
 #include "renderer.h"
@@ -18,6 +17,11 @@
 #define MAX_BOOK_NAME 128
 extern RTC_NOINIT_ATTR char rtc_currently_parsing_book[MAX_BOOK_NAME];
 
+enum class BookSortingMethod {
+    Author,
+    Folder,
+    Alphabetical,
+};
 
 class Book {
 public:
@@ -46,6 +50,7 @@ public:
 
 
     std::string path;
+    std::string fileName;
     std::string title;
     std::string author;
     int totalPageCount = 0;
@@ -60,15 +65,18 @@ public:
     std::vector<cachedImage> cachedImages;
     RenderSettings renderSettings;
 
-    Book(std::string path, std::string title, std::string author, int totalPageCount);
+    Book(std::string path, std::string fileName, std::string title, std::string author, int totalPageCount);
 
     Book(std::string path,
+         std::string fileName,
          std::string title,
          std::string author,
          int totalPageCount,
          int chapterCount,
          const std::vector<int>& chapterPageCounts,
          const RenderSettings& renderSettings);
+
+    Book(const Book& other);
 
     ~Book();
 
@@ -81,9 +89,9 @@ public:
     bool matchesRenderSettings(const RenderSettings &current) const;
 };
 
-class Author {
+class Folder {
     public:
-        Author(std::string name);
+        Folder(std::string name);
         std::vector<Book*> bookList;
         std::string name;
 };
@@ -107,10 +115,15 @@ public:
     void transferDataToSD(); //transfer all book data from flash to sd
     void reindexBook(Book *book);
     void refreshFavorites();
+    Folder* getParentFolder(Book* book);
+    Book* findBookByPath(std::string bookPath);
 
     std::vector<Book*> bookList;
 
-    std::vector<Author> authorList;
+    std::vector<Folder> authorList;
+    std::vector<Folder> folderList;
+    std::vector<Folder> alphabeticList;
+
     std::map<std::string, Book*> indexedBooks;
 private:
 };

@@ -30,9 +30,6 @@ Reader::~Reader()
     free(rightPageFrameBuffer);
     free(rightPageFrameBufferNext);
     free(rightPageFrameBufferPrevious);
-    if (epub) {
-    delete epub;
-    }
 }
 
 inline uint8_t pop8(uint8_t v) {
@@ -58,46 +55,14 @@ void Reader::init(Book *book,Renderer* renderer)
     this->currentBookPath = book->path;
     this->currentChapter = 0;
 
-    this->epub = new Epub(std::string("/sdcard/") + this->currentBookPath);
+    //fileParser = createFileParser(std::string("/sdcard/") + this->currentBookPath);
+    fileParser = createFileParser(this->currentBookPath);
     ESP_LOGI(TAG, "book path: %s", this->currentBookPath.c_str());
-    if (epub->load())
+    if (fileParser->load(book))
     {
-        ESP_LOGI(TAG, "book title: %s", (epub->get_title()).c_str());
-        ESP_LOGI(TAG, "first chapter: %s", (epub->get_spine_item(0)).c_str());
+        ESP_LOGI(TAG, "book title: %s", (book->title).c_str());
+        //ESP_LOGI(TAG, "first chapter: %s", (epub->get_spine_item(0)).c_str());
     }
-}
-
-int Reader::getCurrentPageAbsolute(int chapter, int page)
-{
-    int pageCounter = 0;
-    for(int i = 0;i<chapter;i++)
-    {
-        pageCounter+= book->chapterPageCounts[i];
-    }
-    pageCounter+=page;
-    return pageCounter;
-}
-
-int Reader::getCurrentChapter(int page)
-{
-    int pageCounter = page;
-    for(int i = 0;i<this->epub->get_spine_items_count();i++)
-    {
-        pageCounter-= book->chapterPageCounts[i];
-        if(pageCounter<0) return i;
-    }
-    return 0;
-}
-
-int Reader::getCurrentPageInChapter(int page)
-{
-    int pageCounter = page;
-    for(int i = 0;i<this->epub->get_spine_items_count();i++)
-    {
-        if(pageCounter<book->chapterPageCounts[i]) return pageCounter;
-        pageCounter-= book->chapterPageCounts[i];
-    }
-    return 0;
 }
 
 void Reader::doWhileListening(std::function<void()> func)
@@ -118,38 +83,21 @@ void Reader::doWhileListening(std::function<void()> func)
     Device::getInstance().setLatchTimeOut(100000);
 }
 
-int Reader::renderPages(unsigned char* leftPageFrameBuffer,unsigned char* rightPageFrameBuffer,int pageCacheIndex)
+bool Reader::renderPages(unsigned char* leftPageFrameBuffer,unsigned char* rightPageFrameBuffer,int pageCacheIndex)
 {
-    ESP_LOGI(TAG, "rendering page %d", book->currentPage);
-    currentChapter = getCurrentChapter(book->currentPage);
-    int currentPageInChapter = getCurrentPageInChapter(book->currentPage);
-    std::string currentChapterPath = epub->get_spine_item(this->currentChapter);
-    ESP_LOGI(TAG, "render Chapter: %s", currentChapterPath.c_str());
-    char *html = reinterpret_cast<char *>(this->epub->get_item_contents(currentChapterPath));
-    if(html)
+    if(fileParser->renderPageToBuffers(book->currentPage,leftPageFrameBuffer,rightPageFrameBuffer,pageCacheIndex))
     {
-        renderer->clearScreenBuffer(leftPageFrameBuffer);
-        renderer->clearScreenBuffer(rightPageFrameBuffer);
-        HtmlParser *parser = nullptr;
-        parser = new HtmlParser(html, strlen(html), currentChapterPath,this->renderer,currentPageInChapter,this->epub,leftPageFrameBuffer,rightPageFrameBuffer);
-        parser->cachedImages = book->cachedImages;
-        parser->parse();
-        pageElementIndex[pageCacheIndex] = parser->currentElementIndex;
-        pageChapterIndex[pageCacheIndex] = currentChapter;
-        pageImagePresent[pageCacheIndex] = parser->imagePresentOnPage;
-
-        free(html);
-        delete parser;
         this->renderer->drawPageOverlay(leftPageFrameBuffer,book->currentPage+1,book->totalPageCount);
         this->renderer->drawPageOverlay(rightPageFrameBuffer,book->currentPage+2,book->totalPageCount);
         // if (Device::getInstance().deviceSettings.displayBattery) {
         //     int batteryLevel = Device::getInstance().getBatteryPercentage();;
         //     this->renderer->drawBattery(rightPageFrameBuffer,batteryLevel);
         // }
-        if(checkBookMark()) renderer->drawBookMark(rightPageFrameBuffer,false);
+        if(checkBookMark()) renderer->drawBookMark(rightPageFrameBuffer,true);
         if(book->currentPage==0) this->renderer->epd.forceRefresh();
+        return true;
     }
-    return 0;
+    return false;
 }
 
 void Reader::openPage()
@@ -157,8 +105,8 @@ void Reader::openPage()
     Device::getInstance().clearButtonLatches();
     Device::getInstance().setLatchTimeOut(100000);
     renderPages(leftPageFrameBuffer, rightPageFrameBuffer,1);
-    if((imagePreviouslyPresent!=pageImagePresent[1]) || pageImagePresent[1]) renderer->epd.forceRefresh();
-    imagePreviouslyPresent=pageImagePresent[1];
+    if((imagePreviouslyPresent!=fileParser->pageImagePresent[1]) || fileParser->pageImagePresent[1]) renderer->epd.forceRefresh();
+    imagePreviouslyPresent=fileParser->pageImagePresent[1];
     renderer->drawBattery(rightPageFrameBuffer,Device::getInstance().getBatteryPercentage());
     this->renderer->epd.DisplayPictureBoth(
         leftPageFrameBuffer,
@@ -175,12 +123,12 @@ void Reader::openPage()
             }
         }
     );
-    book->currentPageElementIndex = pageElementIndex[1]; //store what chapter and html element the current page is at
-    book->currentPageChapterIndex = pageChapterIndex[1];
+    book->currentPageElementIndex = fileParser->pageElementIndex[1]; //store what chapter and html element the current page is at
+    book->currentPageChapterIndex = fileParser->pageChapterIndex[1];
     ESP_LOGI(TAG, "image present array: %d %d %d",
-         static_cast<int>(pageImagePresent[0]),
-         static_cast<int>(pageImagePresent[1]),
-         static_cast<int>(pageImagePresent[2]));
+         static_cast<int>(fileParser->pageImagePresent[0]),
+         static_cast<int>(fileParser->pageImagePresent[1]),
+         static_cast<int>(fileParser->pageImagePresent[2]));
     
     if(Device::getInstance().buttonLatchedStates[MIDDLE_BUTTON]) {middleButtonAction(); return;}
     if(Device::getInstance().buttonLatchedStates[PAGE_RIGHT_BUTTON]) {rightPageAction(); return;}
@@ -191,17 +139,20 @@ void Reader::openPage()
 
 void Reader::nextChapter()
 {
-    currentChapter = getCurrentChapter(book->currentPage);
-    if(currentChapter<book->chapterPageCounts.size()-1) currentChapter++;
-    book->currentPage = getCurrentPageAbsolute(currentChapter,0);
+    currentChapter = fileParser->getCurrentChapter(book->currentPage);
+    if(currentChapter<book->chapterPageCounts.size()-1) 
+    {
+        currentChapter++;
+        book->currentPage = fileParser->getCurrentPageAbsolute(currentChapter,0);
+    }
     openPage();
 }
 
 void Reader::prevChapter()
 {
-    currentChapter = getCurrentChapter(book->currentPage);
-    if(currentChapter>0 && getCurrentPageInChapter(book->currentPage)==0) currentChapter--;
-    book->currentPage = getCurrentPageAbsolute(currentChapter,0);
+    currentChapter = fileParser->getCurrentChapter(book->currentPage);
+    if(currentChapter>0 && fileParser->getCurrentPageInChapter(book->currentPage)==0) currentChapter--;
+    book->currentPage = fileParser->getCurrentPageAbsolute(currentChapter,0);
     openPage();
 }
 
@@ -219,13 +170,13 @@ void Reader::nextPage()
 
     renderer->drawBattery(rightPageFrameBufferNext,Device::getInstance().getBatteryPercentage());
     ESP_LOGI(TAG, "image present array: %d %d %d",
-         static_cast<int>(pageImagePresent[0]),
-         static_cast<int>(pageImagePresent[1]),
-         static_cast<int>(pageImagePresent[2]));
-    std::rotate(pageChapterIndex.begin(), pageChapterIndex.begin() + 1, pageChapterIndex.end());
-    std::rotate(pageElementIndex.begin(), pageElementIndex.begin() + 1, pageElementIndex.end());
-    std::rotate(pageImagePresent.begin(), pageImagePresent.begin() + 1, pageImagePresent.end());
-    if((imagePreviouslyPresent!=pageImagePresent[1]) || pageImagePresent[1]) 
+         static_cast<int>(fileParser->pageImagePresent[0]),
+         static_cast<int>(fileParser->pageImagePresent[1]),
+         static_cast<int>(fileParser->pageImagePresent[2]));
+    std::rotate(fileParser->pageChapterIndex.begin(), fileParser->pageChapterIndex.begin() + 1, fileParser->pageChapterIndex.end());
+    std::rotate(fileParser->pageElementIndex.begin(), fileParser->pageElementIndex.begin() + 1, fileParser->pageElementIndex.end());
+    std::rotate(fileParser->pageImagePresent.begin(), fileParser->pageImagePresent.begin() + 1, fileParser->pageImagePresent.end());
+    if((imagePreviouslyPresent!=fileParser->pageImagePresent[1]) || fileParser->pageImagePresent[1]) 
     {
         if(Device::getInstance().deviceSettings.smartImageDetect)
         {
@@ -240,7 +191,7 @@ void Reader::nextPage()
             renderer->epd.forceRefresh();
         }
     }
-    imagePreviouslyPresent=pageImagePresent[1];
+    imagePreviouslyPresent=fileParser->pageImagePresent[1];
 
     this->renderer->epd.DisplayPictureBoth(
         leftPageFrameBufferNext,
@@ -255,12 +206,12 @@ void Reader::nextPage()
             book->currentPage -= 2;
         }
     );
-    book->currentPageElementIndex = pageElementIndex[1]; //store what chapter and html element the current page is at
-    book->currentPageChapterIndex = pageChapterIndex[1];
+    book->currentPageElementIndex = fileParser->pageElementIndex[1]; //store what chapter and html element the current page is at
+    book->currentPageChapterIndex = fileParser->pageChapterIndex[1];
     ESP_LOGI(TAG, "image present array: %d %d %d",
-         static_cast<int>(pageImagePresent[0]),
-         static_cast<int>(pageImagePresent[1]),
-         static_cast<int>(pageImagePresent[2]));
+         static_cast<int>(fileParser->pageImagePresent[0]),
+         static_cast<int>(fileParser->pageImagePresent[1]),
+         static_cast<int>(fileParser->pageImagePresent[2]));
 
     if(Device::getInstance().buttonLatchedStates[MIDDLE_BUTTON]) {middleButtonAction(); return;}
     if(Device::getInstance().buttonLatchedStates[PAGE_RIGHT_BUTTON]) {rightPageAction(); return;}
@@ -278,14 +229,14 @@ void Reader::prevPage()
         book->currentPage -= 2;
         renderer->drawBattery(rightPageFrameBufferPrevious,Device::getInstance().getBatteryPercentage());
         ESP_LOGI(TAG, "image present array: %d %d %d",
-         static_cast<int>(pageImagePresent[0]),
-         static_cast<int>(pageImagePresent[1]),
-         static_cast<int>(pageImagePresent[2]));
-        std::rotate(pageChapterIndex.begin(), pageChapterIndex.begin() + 2, pageChapterIndex.end());
-        std::rotate(pageElementIndex.begin(), pageElementIndex.begin() + 2, pageElementIndex.end());
-        std::rotate(pageImagePresent.begin(), pageImagePresent.begin() + 2, pageImagePresent.end());
+         static_cast<int>(fileParser->pageImagePresent[0]),
+         static_cast<int>(fileParser->pageImagePresent[1]),
+         static_cast<int>(fileParser->pageImagePresent[2]));
+        std::rotate(fileParser->pageChapterIndex.begin(), fileParser->pageChapterIndex.begin() + 2, fileParser->pageChapterIndex.end());
+        std::rotate(fileParser->pageElementIndex.begin(), fileParser->pageElementIndex.begin() + 2, fileParser->pageElementIndex.end());
+        std::rotate(fileParser->pageImagePresent.begin(), fileParser->pageImagePresent.begin() + 2, fileParser->pageImagePresent.end());
         
-        if((imagePreviouslyPresent!=pageImagePresent[1]) || pageImagePresent[1]) 
+        if((imagePreviouslyPresent!=fileParser->pageImagePresent[1]) || fileParser->pageImagePresent[1]) 
         {
             if(Device::getInstance().deviceSettings.smartImageDetect)
             {
@@ -300,7 +251,7 @@ void Reader::prevPage()
                 renderer->epd.forceRefresh();
             } 
         }
-        imagePreviouslyPresent=pageImagePresent[1];
+        imagePreviouslyPresent=fileParser->pageImagePresent[1];
 
         this->renderer->epd.DisplayPictureBoth(
             leftPageFrameBufferPrevious,
@@ -318,12 +269,12 @@ void Reader::prevPage()
                 }
             }
         );
-        book->currentPageElementIndex = pageElementIndex[1]; //store what chapter and html element the current page is at
-        book->currentPageChapterIndex = pageChapterIndex[1];
+        book->currentPageElementIndex = fileParser->pageElementIndex[1]; //store what chapter and html element the current page is at
+        book->currentPageChapterIndex = fileParser->pageChapterIndex[1];
         ESP_LOGI(TAG, "image present array: %d %d %d",
-         static_cast<int>(pageImagePresent[0]),
-         static_cast<int>(pageImagePresent[1]),
-         static_cast<int>(pageImagePresent[2]));
+         static_cast<int>(fileParser->pageImagePresent[0]),
+         static_cast<int>(fileParser->pageImagePresent[1]),
+         static_cast<int>(fileParser->pageImagePresent[2]));
     }
     else
     {
@@ -339,52 +290,7 @@ void Reader::prevPage()
 
 void Reader::indexPages(void)
 {
-    book->chapterPageCounts.clear();
-    book->cachedImages.clear();
-    book->totalPageCount = 0;
-    book->chapterCount = this->epub->get_spine_items_count();
-    float percent = 0;
-    float prevPercent = 0;
-    for(int i=0;i<epub->get_spine_items_count();i++)
-    {
-        percent += 1/float(epub->get_spine_items_count());
-        if(percent>=prevPercent+0.1) 
-        {
-            prevPercent += 0.1;
-            Device::getInstance().notificationHandler->drawIndexingNotification(book->title,int(100*percent));
-        }
-        std::string currentChapterPath = epub->get_spine_item(i);
-        char *html = reinterpret_cast<char *>(this->epub->get_item_contents(currentChapterPath));
-        if(html)
-        {
-            HtmlParser *parser = nullptr;
-            ESP_LOGI(TAG, "render Chapter: %s", currentChapterPath.c_str());
-            parser = new HtmlParser(html, strlen(html), currentChapterPath,this->renderer,-2,this->epub,leftPageFrameBuffer,rightPageFrameBuffer);
-            parser->indexingMode = true;
-            parser->currentChapterIndex = i;
-            parser->currentChapterStartPageIndex = book->totalPageCount;
-            parser->bookMarks = book->bookMarks;
-            parser->cachedImages = book->cachedImages;
-            Book::BookMark currentPageData = Book::BookMark(book->currentPage,book->currentPageChapterIndex,book->currentPageElementIndex);
-            parser->bookMarks.push_back(currentPageData);
-            ESP_LOGI(TAG, "requested element: %d", book->currentPageElementIndex);
-            parser->parse();
-            if(book->currentPageChapterIndex==i) 
-            {
-                book->currentPage = parser->bookMarks[parser->bookMarks.size()-1].pageIndex;
-                if(book->currentPage%2) book->currentPage-=1;
-            }
-            parser->bookMarks.pop_back();
-            book->bookMarks = parser->bookMarks;
-            book->cachedImages = parser->cachedImages;
-            int pageCount = (parser->pageReturn+1);
-            if(pageCount%2) pageCount+=1;
-            book->chapterPageCounts.push_back(pageCount);
-           book->totalPageCount += pageCount;
-            free(html);
-            delete parser;
-        } 
-    }
+    fileParser->indexChapters();
 }
 
 void Reader::addBookMark()
@@ -398,7 +304,7 @@ void Reader::addBookMark()
         }
     }
 
-    book->bookMarks.push_back(Book::BookMark(book->currentPage,pageChapterIndex[1],pageElementIndex[1])); //store the data on the current bookmark
+    book->bookMarks.push_back(Book::BookMark(book->currentPage,fileParser->pageChapterIndex[1],fileParser->pageElementIndex[1])); //store the data on the current bookmark
 }
 
 bool Reader::checkBookMark()
@@ -453,17 +359,21 @@ void Reader::upButtonAction()
     {
         //Device::buzz();
         state = State::BookMarkMenu;
-        bookMarkMenuHandler = new BookMarkMenuHandler(book,renderer,epub,leftPageFrameBuffer,rightPageFrameBuffer);
+        bookMarkMenuHandler = new BookMarkMenuHandler(book,renderer,fileParser.get(),leftPageFrameBuffer,rightPageFrameBuffer);
         bookMarkMenuHandler->bookMarkOnPage = checkBookMark();
-        bookMarkMenuHandler->currentTocIndex = epub->get_toc_index_for_spine_index(getCurrentChapter(book->currentPage));
+        //bookMarkMenuHandler->currentTocIndex = epub->get_toc_index_for_spine_index(getCurrentChapter(book->currentPage));
+        bookMarkMenuHandler->currentTocIndex = fileParser->getTocIndexFromChapterindex(fileParser->getCurrentChapter(book->currentPage));
         bookMarkMenuHandler->selectedBookMarkIndex = findCurrentBookMarkIndex();
         doWhileListening([&]() {bookMarkMenuHandler->drawMenu();});
     }
     else if(state==State::BookMarkMenu)
     {
+                    ESP_LOGI(TAG, "element index %d", bookMarkMenuHandler->currentVerticalElementIndex);
+            ESP_LOGI(TAG, "max elements %d",bookMarkMenuHandler->maxVerticalElements);
         if(bookMarkMenuHandler->currentVerticalElementIndex<bookMarkMenuHandler->maxVerticalElements)
         {
             //Device::buzz();
+
             bookMarkMenuHandler->currentVerticalElementIndex+=1;
             doWhileListening([&]() {bookMarkMenuHandler->drawMenu();});
         }
@@ -476,8 +386,8 @@ void Reader::downButtonAction()
     {
         //Device::buzz();
         addBookMark();
-        if(checkBookMark()) renderer->drawBookMark(rightPageFrameBuffer,false);
-        else renderer->drawBookMark(rightPageFrameBuffer,true);
+        if(checkBookMark()) renderer->drawBookMark(rightPageFrameBuffer,true);
+        else renderer->drawBookMark(rightPageFrameBuffer,false);
         this->renderer->epd.DisplayPictureBoth(leftPageFrameBuffer,rightPageFrameBuffer);
         //Device::getInstance().bookHandler->saveBook(book);
     }
@@ -546,9 +456,6 @@ void Reader::middleButtonAction()
     if(state==State::Reading)
     {
        // Device::buzz();
-        if (epub) {
-        delete epub;
-        }
         Device::getInstance().state=Device::State::Menu;
         //Device::getInstance()->saveAppState();
         renderer->epd.forceRefresh();
@@ -612,8 +519,8 @@ void Reader::middleButtonAction()
             //Device::buzz();
             addBookMark();
             bookMarkMenuHandler->bookMarkOnPage = !bookMarkMenuHandler->bookMarkOnPage;
-            if(checkBookMark()) renderer->drawBookMark(rightPageFrameBuffer,false);
-            else renderer->drawBookMark(rightPageFrameBuffer,true);
+            if(checkBookMark()) renderer->drawBookMark(rightPageFrameBuffer,true);
+            else renderer->drawBookMark(rightPageFrameBuffer,false);
             doWhileListening([&]() {bookMarkMenuHandler->drawMenu();});
             this->renderer->epd.DisplayPictureBoth(leftPageFrameBuffer,rightPageFrameBuffer);
             //Device::getInstance().bookHandler->saveBook(book);
@@ -653,8 +560,8 @@ void Reader::middleButtonAction()
             if(bookMarkMenuHandler->currentVerticalElementIndex!=0)
             {
                 //Device::buzz();
-                int newChapterIndex = epub->get_spine_index_for_toc_index(bookMarkMenuHandler->currentVerticalElementIndex-1);
-                book->currentPage = getCurrentPageAbsolute(newChapterIndex,0);
+                int newChapterIndex = fileParser->getChapterIndexFromTOCindex(bookMarkMenuHandler->currentVerticalElementIndex-1);
+                book->currentPage = fileParser->getCurrentPageAbsolute(newChapterIndex,0);
                 state = State::Reading;
                 delete bookMarkMenuHandler;
                 openPage();  

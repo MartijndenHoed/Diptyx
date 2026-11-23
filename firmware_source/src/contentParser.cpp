@@ -167,8 +167,12 @@ void ContentParser::parseTextBlock(const std::vector<int> textBlock, bool newLin
     
     if(currentLine>=maxLines)
     {
-        this->finishPage();
-        flushToOVerflowBuffer(textBlock,textBlockIndex);
+        if(textBlockSize!=0) //only create a new page if there is actually content on the current line
+        {
+            this->finishPage();
+            flushToOVerflowBuffer(textBlock,textBlockIndex);
+        }
+        else textOverflowBuffer.clear();
         return;
     }
 

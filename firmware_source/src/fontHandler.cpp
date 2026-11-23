@@ -86,6 +86,13 @@ int FontHandler::getLeftBearing(int index)
     return leftBearing[index];
 }
 
+int FontHandler::getShiftUp(int index)
+{
+    if(uniFontEnabled) return 0;
+    return shiftup[index];
+    //return 0;
+}
+
 bool FontHandler::getFontChar(int index,int pixel)
 {
     if(uniFontEnabled) 
@@ -232,7 +239,7 @@ void FontHandler::indexFont(const std::string &fontName) {
             else if (key == "family") f.family = value;
             else if (key == "point-size") f.pointSize = std::stoi(value);
             else if (key == "line-height") f.lineHeight = std::stoi(value);
-            else if (key == "shift-up") f.shiftUp = std::stoi(value);
+            else if (key == "shift-up") f.shiftUpAll = std::stoi(value);
             else if (key == "bounding-box") {
                 int x = 0, y = 0;
                 int n = sscanf(value.c_str(), "%d %d", &x, &y);
@@ -306,7 +313,9 @@ void FontHandler::processGlyph(int codepoint,
                                const std::vector<std::string> &bitmapLines,
                                size_t &pixelIndex,
                                int leftBearingVal,
-                               int rightBearingVal) {
+                               int rightBearingVal,
+                                int boundingBoxY,
+                            int shiftupVal) {
     if (codepoint < 0 || codepoint >= 10000) return;
     // Convert to binary grid
     int height = bitmapLines.size();
@@ -332,6 +341,7 @@ void FontHandler::processGlyph(int codepoint,
     width[codepoint] = charWidth+left+right;
     leftBearing[codepoint] = left;
     rightBearing[codepoint] = right;
+    shiftup[codepoint] = shiftupVal;
 
     // Record start index
     bitmapMap[codepoint] = pixelIndex;
@@ -339,6 +349,16 @@ void FontHandler::processGlyph(int codepoint,
     // printf("codepoint %d \n",codepoint);
     // printf("charWidth %d \n",widthPx);
     // printf("leftBearing %d \n",left);
+    // vtask(10);
+
+    //pad the bitmap to fit to the bounding box
+    if (!grid.empty() && grid.size() < static_cast<size_t>(boundingBoxY))
+    {
+        size_t rowsToAdd = boundingBoxY - grid.size();
+
+        grid.insert(grid.begin(), rowsToAdd,
+                std::vector<int>(grid[0].size(), 0));
+    }
 
     // Pack bits into bitmap vector
     for (auto &row : grid) {
@@ -379,6 +399,7 @@ void FontHandler::loadFont(const std::string &yaffPath) {
     width.assign(10000, 0);
     leftBearing.assign(10000, 0);
     rightBearing.assign(10000, 0);
+    shiftup.assign(10000, 0);
     bitmapMap.assign(10000, 0);
     bitmap.clear();
 
@@ -395,6 +416,7 @@ void FontHandler::loadFont(const std::string &yaffPath) {
     int codepoint = -1;
     size_t pixelIndex = 1;
     int leftVal = -1, rightVal = -1;
+    int shiftupVal = 0;
 
     while (std::getline(file, line)) {
         // trim leading/trailing spaces
@@ -410,9 +432,10 @@ void FontHandler::loadFont(const std::string &yaffPath) {
             if (line.rfind("u+", 0) == 0)
             {
                 if (codepoint >= 0 && (!bitmapLines.empty() || leftVal>-1 || rightVal>-1)) {
-                    processGlyph(codepoint, bitmapLines, pixelIndex, leftVal, rightVal);
+                    processGlyph(codepoint, bitmapLines, pixelIndex, leftVal, rightVal,currentFont.boundingBoxY,shiftupVal);
                     bitmapLines.clear();
                     leftVal = rightVal = -1;
+                    shiftupVal = 0;
                     codepoint=-1;
                 }
             }
@@ -431,6 +454,10 @@ void FontHandler::loadFont(const std::string &yaffPath) {
             rightVal = std::stoi(line.substr(14));
             continue;
         }
+        if (line.rfind("shift-up:", 0) == 0) {
+            shiftupVal = std::stoi(line.substr(9));
+            continue;
+        }
 
         // Bitmap line
         if (!line.empty() && (line.find_first_of(".@") ==0) && codepoint!=-1) {
@@ -440,7 +467,7 @@ void FontHandler::loadFont(const std::string &yaffPath) {
 
     // Flush last glyph
     if (codepoint >= 0 && !bitmapLines.empty()) {
-        processGlyph(codepoint, bitmapLines, pixelIndex, leftVal, rightVal);
+        processGlyph(codepoint, bitmapLines, pixelIndex, leftVal, rightVal,currentFont.boundingBoxY,shiftupVal);
     }
 
     file.close();

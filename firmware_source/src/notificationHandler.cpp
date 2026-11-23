@@ -20,8 +20,8 @@ void NotificationHandler::drawUSBQuery()
     int rectHeight = 4 * GLYPH_HEIGHT;
     int rectWidth = EPD_HEIGHT - 2 * originX;
     int padding = 4;
-    renderer->drawSquare(originX,originY,rectWidth,rectHeight,false);
-    renderer->drawSquare(originX+padding,originY+padding,rectWidth-2*padding,rectHeight-2*padding,true);
+    renderer->drawRectangle(originX,originY,rectWidth,rectHeight,true);
+    renderer->drawRectangle(originX+padding,originY+padding,rectWidth-2*padding,rectHeight-2*padding,false);
 
     std::string displayString = std::string("Charge device or transfer files?");
     renderer->drawString(EPD_HEIGHT/2 - displayString.length()*GLYPH_WIDTH/4, originY + 1.5*GLYPH_HEIGHT,displayString,1,true,false,true);
@@ -31,16 +31,16 @@ void NotificationHandler::drawUSBQuery()
     originX = 2*GLYPH_WIDTH;
     originY = originY-3 * GLYPH_HEIGHT;
     bool chargingSelected = (selectionState!=Device::usbState::Charging);
-    renderer->drawSquare(originX,originY,rectWidth,rectHeight,!chargingSelected);
-    renderer->drawSquare(originX+padding,originY+padding,rectWidth-2*padding,rectHeight-2*padding,chargingSelected);
+    renderer->drawRectangle(originX,originY,rectWidth,rectHeight,chargingSelected);
+    renderer->drawRectangle(originX+padding,originY+padding,rectWidth-2*padding,rectHeight-2*padding,!chargingSelected);
     displayString = std::string("Charge");
     renderer->drawString(originX + rectWidth/2 - displayString.length()*GLYPH_WIDTH/4, originY + 0.5*GLYPH_HEIGHT,displayString,1,true,false,chargingSelected);
 
 
     originX = EPD_HEIGHT - 2*GLYPH_WIDTH - rectWidth;
     bool transferSelected = (selectionState!=Device::usbState::FileTransfer);
-    renderer->drawSquare(originX,originY,rectWidth,rectHeight,!transferSelected);
-    renderer->drawSquare(originX+padding,originY+padding,rectWidth-2*padding,rectHeight-2*padding,transferSelected);
+    renderer->drawRectangle(originX,originY,rectWidth,rectHeight,transferSelected);
+    renderer->drawRectangle(originX+padding,originY+padding,rectWidth-2*padding,rectHeight-2*padding,!transferSelected);
     displayString = std::string("Transfer");
     renderer->drawString(originX + rectWidth/2 - displayString.length()*GLYPH_WIDTH/4, originY + 0.5*GLYPH_HEIGHT,displayString,1,true,false,transferSelected);
     
@@ -60,8 +60,8 @@ void NotificationHandler::drawManualFileTransfer(bool disconnect)
     int rectHeight = 4 * GLYPH_HEIGHT;
     int rectWidth = EPD_HEIGHT - 2 * originX;
     int padding = 4;
-    renderer->drawSquare(originX,originY,rectWidth,rectHeight,false);
-    renderer->drawSquare(originX+padding,originY+padding,rectWidth-2*padding,rectHeight-2*padding,true);
+    renderer->drawRectangle(originX,originY,rectWidth,rectHeight,true);
+    renderer->drawRectangle(originX+padding,originY+padding,rectWidth-2*padding,rectHeight-2*padding,false);
 
     std::string displayString = std::string("You may now connect a USB type-C cable");
     renderer->drawString(EPD_HEIGHT/2 - displayString.length()*GLYPH_WIDTH/4, originY + 1.5*GLYPH_HEIGHT,displayString,1,true,false,true);
@@ -73,8 +73,8 @@ void NotificationHandler::drawManualFileTransfer(bool disconnect)
 
     originX = EPD_HEIGHT - 2*GLYPH_WIDTH - rectWidth;
     bool transferSelected = !disconnect;
-    renderer->drawSquare(originX,originY,rectWidth,rectHeight,!transferSelected);
-    renderer->drawSquare(originX+padding,originY+padding,rectWidth-2*padding,rectHeight-2*padding,transferSelected);
+    renderer->drawRectangle(originX,originY,rectWidth,rectHeight,transferSelected);
+    renderer->drawRectangle(originX+padding,originY+padding,rectWidth-2*padding,rectHeight-2*padding,!transferSelected);
     displayString = std::string("Exit");
     renderer->drawString(originX + rectWidth/2 - displayString.length()*GLYPH_WIDTH/4, originY + 0.5*GLYPH_HEIGHT,displayString,1,true,false,transferSelected);
     
@@ -92,8 +92,8 @@ void NotificationHandler::drawIndexingNotification(std::string bookTitle)
     int rectHeight = 4 * GLYPH_HEIGHT;
     int rectWidth = EPD_HEIGHT - 2 * originX;
     int padding = 4;
-    renderer->drawSquare(originX,originY,rectWidth,rectHeight,false);
-    renderer->drawSquare(originX+padding,originY+padding,rectWidth-2*padding,rectHeight-2*padding,true);
+    renderer->drawRectangle(originX,originY,rectWidth,rectHeight,true);
+    renderer->drawRectangle(originX+padding,originY+padding,rectWidth-2*padding,rectHeight-2*padding,false);
 
     std::string displayString = std::string("Loading book: ") + bookTitle;
     if (displayString.length() > 50) {
@@ -112,8 +112,8 @@ void NotificationHandler::drawIndexingNotification(std::string bookTitle, int pe
     int rectHeight = 4 * GLYPH_HEIGHT;
     int rectWidth = EPD_HEIGHT - 2 * originX;
     int padding = 4;
-    renderer->drawSquare(originX,originY,rectWidth,rectHeight,false);
-    renderer->drawSquare(originX+padding,originY+padding,rectWidth-2*padding,rectHeight-2*padding,true);
+    renderer->drawRectangle(originX,originY,rectWidth,rectHeight,true);
+    renderer->drawRectangle(originX+padding,originY+padding,rectWidth-2*padding,rectHeight-2*padding,false);
 
     std::string displayString = std::string("Indexing book: ") + bookTitle;
     if (displayString.length() > 50) {
@@ -133,8 +133,8 @@ void NotificationHandler::drawBookOpeningNotification(std::string bookTitle)
     int rectHeight = 4 * GLYPH_HEIGHT;
     int rectWidth = EPD_HEIGHT - 2 * originX;
     int padding = 4;
-    renderer->drawSquare(originX,originY,rectWidth,rectHeight,false);
-    renderer->drawSquare(originX+padding,originY+padding,rectWidth-2*padding,rectHeight-2*padding,true);
+    renderer->drawRectangle(originX,originY,rectWidth,rectHeight,true);
+    renderer->drawRectangle(originX+padding,originY+padding,rectWidth-2*padding,rectHeight-2*padding,false);
 
     std::string displayString = std::string("Opening book: ") + bookTitle;
     if (displayString.length() > 50) {
@@ -154,8 +154,8 @@ void NotificationHandler::drawErrorNotification(std::string bookTitle)
     int rectHeight = 4 * GLYPH_HEIGHT;
     int rectWidth = EPD_HEIGHT - 2 * originX;
     int padding = 4;
-    renderer->drawSquare(originX,originY,rectWidth,rectHeight,false);
-    renderer->drawSquare(originX+padding,originY+padding,rectWidth-2*padding,rectHeight-2*padding,true);
+    renderer->drawRectangle(originX,originY,rectWidth,rectHeight,true);
+    renderer->drawRectangle(originX+padding,originY+padding,rectWidth-2*padding,rectHeight-2*padding,false);
 
     std::string displayString = std::string("Error rendering book: ") + bookTitle;
     if (displayString.length() > 50) {
@@ -176,8 +176,8 @@ void NotificationHandler::drawNotification(std::string notificationText)
     int rectHeight = 4 * GLYPH_HEIGHT;
     int rectWidth = EPD_HEIGHT - 2 * originX;
     int padding = 4;
-    renderer->drawSquare(originX,originY,rectWidth,rectHeight,false);
-    renderer->drawSquare(originX+padding,originY+padding,rectWidth-2*padding,rectHeight-2*padding,true);
+    renderer->drawRectangle(originX,originY,rectWidth,rectHeight,true);
+    renderer->drawRectangle(originX+padding,originY+padding,rectWidth-2*padding,rectHeight-2*padding,false);
 
     std::string displayString = notificationText;
     if (displayString.length() > 50) {
@@ -196,8 +196,8 @@ void NotificationHandler::drawSDcardErrorNotification()
     int rectHeight = 4 * GLYPH_HEIGHT;
     int rectWidth = EPD_HEIGHT - 2 * originX;
     int padding = 4;
-    renderer->drawSquare(originX,originY,rectWidth,rectHeight,false);
-    renderer->drawSquare(originX+padding,originY+padding,rectWidth-2*padding,rectHeight-2*padding,true);
+    renderer->drawRectangle(originX,originY,rectWidth,rectHeight,true);
+    renderer->drawRectangle(originX+padding,originY+padding,rectWidth-2*padding,rectHeight-2*padding,false);
 
     std::string displayString = "Error mounting SD card, shutting down :( ";
     renderer->drawString(EPD_HEIGHT/2 - displayString.length()*GLYPH_WIDTH/4, originY + 2.5*GLYPH_HEIGHT,displayString,1,true,false,true);
@@ -215,8 +215,8 @@ void NotificationHandler::drawStorageAccessNotication()
     int rectHeight = 4 * GLYPH_HEIGHT;
     int rectWidth = EPD_HEIGHT - 2 * originX;
     int padding = 4;
-    renderer->drawSquare(originX,originY,rectWidth,rectHeight,false);
-    renderer->drawSquare(originX+padding,originY+padding,rectWidth-2*padding,rectHeight-2*padding,true);
+    renderer->drawRectangle(originX,originY,rectWidth,rectHeight,true);
+    renderer->drawRectangle(originX+padding,originY+padding,rectWidth-2*padding,rectHeight-2*padding,false);
 
     std::string displayString = "Debug storage access";
     renderer->drawString(EPD_HEIGHT/2 - displayString.length()*GLYPH_WIDTH/4, originY + 2.5*GLYPH_HEIGHT,displayString,1,true,false,true);

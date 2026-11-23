@@ -15,7 +15,7 @@
 class BookMarkMenuHandler
 {
     public:
-        BookMarkMenuHandler(Book *book, Renderer *renderer,Epub *epub,unsigned char* leftPageFrameBuffer,unsigned char* rightPageFrameBuffer);
+        BookMarkMenuHandler(Book *book, Renderer *renderer,FileParser *fileParser,unsigned char* leftPageFrameBuffer,unsigned char* rightPageFrameBuffer);
         ~BookMarkMenuHandler();
 
 
@@ -61,7 +61,7 @@ class BookMarkMenuHandler
 
         Renderer *renderer;
         Book *book;
-        Epub *epub;
+        FileParser *fileParser;
         int selectedBookMarkIndex = -1;
 
         unsigned char* preservedFramebuffer;

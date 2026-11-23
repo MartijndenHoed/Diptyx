@@ -4,8 +4,8 @@
 #include <vector>
 #include <string.h>
 #include "htmlParser.h"
-#include <Epub.h>
-#include "bookHandler.h"
+#include <fileParser.h>
+#include "bookhandler.h"
 #include "bookMarkMenuHandler.h"
 extern "C" {
 
@@ -28,9 +28,6 @@ public:
     std::string currentBookPath;
     std::string currentChapterPath;
 
-    std::vector <int> pageChapterIndex {0,0,0};
-    std::vector <int> pageElementIndex {0,0,0};
-    std::vector <bool> pageImagePresent {false,false,false};
     bool imagePreviouslyPresent = false;
     bool exitGuideEnabled = false;
 
@@ -49,7 +46,7 @@ public:
     void rightPageAction();
     void leftPageAction();
 
-    Epub *epub = nullptr;
+    std::unique_ptr<FileParser> fileParser;
     Renderer* renderer = nullptr;
     BookMarkMenuHandler *bookMarkMenuHandler = nullptr;
     Book *book = nullptr;

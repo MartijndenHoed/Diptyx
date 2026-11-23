@@ -22,7 +22,7 @@ public:
         int boundingBoxY = 0;
         int lineHeight = 0;
         int pointSize = 0;
-        int shiftUp = 0;
+        int shiftUpAll = 0;
     };
 
     struct fontFamily {
@@ -38,6 +38,7 @@ public:
     int getLineHeight();
     bool checkCharExist(int index);
     int getLeftBearing(int index);
+    int getShiftUp(int index);
     bool getFontChar(int index,int pixel);
     void testPrint(void);
     void indexFonts();
@@ -49,13 +50,16 @@ public:
                                const std::vector<std::string> &bitmapLines,
                                size_t &pixelIndex,
                                int leftBearingVal,
-                               int rightBearingVal);
+                               int rightBearingVal,
+                                int boundingBoxY,
+                            int shift);
 
     font currentFont;
 
     std::vector<uint8_t> width;
     std::vector<uint8_t> rightBearing;
     std::vector<uint8_t> leftBearing;
+    std::vector<int8_t> shiftup;
     std::vector<uint16_t> bitmapMap;
     std::vector<char> bitmap;
 

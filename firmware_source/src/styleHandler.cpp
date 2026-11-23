@@ -150,6 +150,18 @@ int Style::translateDimension(const std::string& value, int parentValue) {
         return -1; // fallback
     }
 
+    //Handle -em units
+    size_t emPos = valStr.find("em");
+    if(emPos != std::string::npos) {
+        std::string numberPart = valStr.substr(0, emPos);
+        char* endPtr = nullptr;
+        double val = std::strtod(numberPart.c_str(), &endPtr);
+        if(endPtr != numberPart.c_str()) {
+            return static_cast<int>(std::round(val*Device::getInstance().renderSettings.fontSize));
+        }
+        return Device::getInstance().renderSettings.fontSize; // fallback
+    }
+
     // Handle percentage
     size_t percentPos = valStr.find("%");
     if(percentPos != std::string::npos) {

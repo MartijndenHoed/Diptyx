@@ -18,7 +18,7 @@ MenuHandler::MenuHandler(Renderer *renderer)
     this->leftPageFrameBuffer = (unsigned char*)calloc(EPD_WIDTH * EPD_HEIGHT / 8,sizeof(unsigned char));
     this->rightPageFrameBuffer = (unsigned char*)calloc(EPD_WIDTH * EPD_HEIGHT / 8,sizeof(unsigned char));
     mainMenu = std::make_shared<MenuElement>(renderer, std::string("Diptyx E-reader"),std::string(""));
-    authorMenu = std::make_shared<MenuElement>(renderer, std::string("Library"),std::string("Open & read books"));
+    libraryMenu = std::make_shared<MenuElement>(renderer, std::string("Library"),std::string("Open & read books"));
     settingsMenu = std::make_shared<MenuElement>(renderer, std::string("Settings"),std::string("Edit main settings, render settings, etc."));
     deviceSettingsMenu = std::make_shared<MenuElement>(renderer, std::string("Device settings"),std::string("Edit device behaviour"));
     readSettingsMenu = std::make_shared<MenuElement>(renderer, std::string("Book settings"),std::string("Edit the reading experience"));
@@ -76,6 +76,7 @@ MenuHandler::MenuHandler(Renderer *renderer)
     auto standbyShutdownBox = std::make_shared<ValueElement>(renderer, std::string("Shutdown timer"),std::string("Shutdown after long standby"),
     std::vector<int> {0,1,2,3,7,14,21,28}, std::vector<std::string> {std::string("disabled"),std::string("1 day"),std::string("2 days"),std::string("3 days"),std::string("1 week"),std::string("2 weeks"),std::string("3 weeks"),std::string("4 weeks")},&(Device::getInstance().deviceSettings.standbyShutdown));
 
+
     
     //generate a list for the vcom voltages
     std::vector<int> vcomValues = {}; 
@@ -120,7 +121,7 @@ MenuHandler::MenuHandler(Renderer *renderer)
     //     Device::getInstance().activeBookPath = "firmwareVersion.epub";
     //     Device::getInstance().simpleReader->init("firmwareVersion.epub",Device::getInstance().renderer);
     //     Device::getInstance().saveAppState();
-    Device::getInstance().notificationHandler->drawNotification("Firmware version: 1.0.3");
+    Device::getInstance().notificationHandler->drawNotification("Firmware version: 1.1.1");
     vTaskDelay(pdMS_TO_TICKS(1000));
     Device::getInstance().menuHandler->drawMenu();
     }
@@ -200,8 +201,25 @@ auto fileTransferButton = std::make_shared<ActionElement>(
 );
 
 
-    currentElement = authorMenu;
-    mainMenu->addChild(authorMenu);
+    
+    auto dropDownTestBox = std::make_shared<DropdownElement>(renderer, std::string("Sort by"),
+    std::vector<int> {1,0,2}, std::vector<std::string> {std::string("Folder"),std::string("Author"),std::string("Title")},reinterpret_cast<int*>(&(Device::getInstance().deviceSettings.bookSortingMethod)),    []() {Device::getInstance().menuHandler->layoutLibraryMenu();});
+    
+    //dropdown item for book sorting: author, folder, alphabetic
+    //auto librarySettingsBox = std::make_shared<HorizontalActionElement>(renderer, std::string("Settings"), []() {});
+
+    librarySubMenuElement = std::make_shared<HorizontalMenuElement>(renderer, std::string("SubMenu"),std::string(""));
+
+    auto recentBookElement = std::make_shared<RecentBookElement>(renderer);
+    favoriteBooksFolder = std::make_shared<FavoritesFolderElement>(renderer);
+
+    currentElement = libraryMenu;
+    mainMenu->addChild(recentBookElement);
+
+    librarySubMenuElement->addChild(dropDownTestBox);
+    //librarySubMenuElement->addChild(librarySettingsBox);
+
+    mainMenu->addChild(libraryMenu);
     mainMenu->addChild(manualButton);
     mainMenu->addChild(versionButton);
     mainMenu->addChild(settingsMenu);
@@ -236,10 +254,25 @@ auto fileTransferButton = std::make_shared<ActionElement>(
     //drawMenu();
 }
 
-void MenuHandler::upButtonAction()
+void MenuHandler::upButtonAction() //all this type checking is kinda crazy, and should really be handled by the objects themselves
 {
     if (auto menu = std::static_pointer_cast<MenuElement>(currentElement)) {
-
+        if(menu->children.size()>0 && menu->children[menu->selectedChildIndex]->getType()==UIElementType::HorizontalMenu)
+        {
+            if(auto horizontalMenu = std::static_pointer_cast<HorizontalMenuElement>(menu->children[menu->selectedChildIndex]))
+            {
+                if(horizontalMenu->children.size()>0 && horizontalMenu->children[horizontalMenu->selectedChildIndex]->getType()==UIElementType::DropdownSub)
+                {
+                    auto dropDownElement = std::static_pointer_cast<DropdownElement>(horizontalMenu->children[horizontalMenu->selectedChildIndex]);
+                    if(dropDownElement->selected)
+                    {
+                        if(dropDownElement->selectedValueIndex>0) dropDownElement->selectedValueIndex--;
+                        drawMenu();
+                        return;
+                    }
+                }
+            }
+        }
         if(menu->selectedChildIndex>0)
         {
             //if(!this->buzzDisabled) Device::buzz();
@@ -248,9 +281,9 @@ void MenuHandler::upButtonAction()
                 std::static_pointer_cast<ValueElement>(menu->children[menu->selectedChildIndex])->selected = false;
                 std::static_pointer_cast<ValueElement>(menu->children[menu->selectedChildIndex])->ReadValue();
             }
-            if(menu->selectedChildIndex% MaxElementsPerPage == 0) renderer->epd.forceRefresh();
-            else renderer->epd.partialUpdatesRemaining[1] = 8;
             menu->selectedChildIndex--;
+            if(menu->firstElementOnPage) renderer->epd.forceRefresh();
+            else renderer->epd.partialUpdatesRemaining[1] = 10;
             drawMenu();
             //if(!this->buzzDisabled) Device::buzz();
         }
@@ -262,6 +295,22 @@ void MenuHandler::downButtonAction()
 {
     if (auto menu = std::static_pointer_cast<MenuElement>(currentElement)) {
 
+        if(menu->children.size()>0 && menu->children[menu->selectedChildIndex]->getType()==UIElementType::HorizontalMenu)
+        {
+            if(auto horizontalMenu = std::static_pointer_cast<HorizontalMenuElement>(menu->children[menu->selectedChildIndex]))
+            {
+                if(horizontalMenu->children.size()>0 && horizontalMenu->children[horizontalMenu->selectedChildIndex]->getType()==UIElementType::DropdownSub)
+                {
+                    auto dropDownElement = std::static_pointer_cast<DropdownElement>(horizontalMenu->children[horizontalMenu->selectedChildIndex]);
+                    if(dropDownElement->selected) 
+                    {
+                        if(dropDownElement->selectedValueIndex < dropDownElement->values.size()-1) dropDownElement->selectedValueIndex++;
+                        drawMenu();
+                        return;
+                    }
+                }
+            }
+        }
         if(menu->children.size()!=0 && menu->selectedChildIndex<menu->children.size()-1)
         {
             //if(!this->buzzDisabled) Device::buzz();
@@ -270,9 +319,9 @@ void MenuHandler::downButtonAction()
                 std::static_pointer_cast<ValueElement>(menu->children[menu->selectedChildIndex])->selected = false;
                 std::static_pointer_cast<ValueElement>(menu->children[menu->selectedChildIndex])->ReadValue();
             }
-            menu->selectedChildIndex++;
-            if(menu->selectedChildIndex% MaxElementsPerPage == 0) renderer->epd.forceRefresh();
+            if(menu->lastElementOnPage) renderer->epd.forceRefresh();
             else renderer->epd.partialUpdatesRemaining[1] = 8;
+            menu->selectedChildIndex++;
             drawMenu();
             //if(!this->buzzDisabled) Device::buzz();
         }
@@ -281,13 +330,13 @@ void MenuHandler::downButtonAction()
 
 void MenuHandler::middleButtonAction()
 {
-    if(currentElement->getType()==UIElementType::Menu || currentElement->getType()==UIElementType::Author)
+    if(currentElement->getType()==UIElementType::Menu || currentElement->getType()==UIElementType::Folder)
     {    
         auto menu = std::static_pointer_cast<MenuElement>(currentElement);
         if(menu->children.size() > 0)
         {
             if(menu->children[menu->selectedChildIndex]->getType()==UIElementType::Menu ||
-                menu->children[menu->selectedChildIndex]->getType()==UIElementType::Author)
+                menu->children[menu->selectedChildIndex]->getType()==UIElementType::Folder)
             {        
                 //if(!this->buzzDisabled) Device::buzz();
                 this->currentElement = menu->children[menu->selectedChildIndex];
@@ -308,11 +357,14 @@ void MenuHandler::middleButtonAction()
                 bookElement->book->favorite = !bookElement->book->favorite;
                 //bookElement->elementExtraDescription = (bookElement->book->favorite?std::string("❤"):std::string("")); //book descriptions auto update
                 Device::getInstance().bookHandler->saveBook(bookElement->book); //store the updated book
-                if(!authorMenu->selectedChildIndex==0) Device::getInstance().bookHandler->refreshFavorites(); //update the favorites vector
-                auto favoriteListElement = std::static_pointer_cast<AuthorElement>(authorMenu->children[0]);
-                favoriteListElement->initChildren(); //and update the UI element
-                favoriteListElement->elementDescription = "Books: " + std::to_string(std::static_pointer_cast<AuthorElement>(authorMenu->children[0])->author->bookList.size());
-                if(favoriteListElement->selectedChildIndex>=favoriteListElement->children.size()) favoriteListElement->selectedChildIndex = favoriteListElement->children.size()-1;
+                
+                
+                //if(!libraryMenu->selectedChildIndex==0) Device::getInstance().bookHandler->refreshFavorites(); //update the favorites vector
+                // auto favoriteListElement = std::static_pointer_cast<FavoritesFolderElement>(libraryMenu->children[0]);
+                // favoriteListElement->initChildren(); //and update the UI element
+                // if(favoriteListElement->selectedChildIndex>=favoriteListElement->children.size()) favoriteListElement->selectedChildIndex = favoriteListElement->children.size()-1;
+                
+                favoriteBooksFolder->initChildren();
                 drawMenu();
             }
             else if(menu->children[menu->selectedChildIndex]->getType()==UIElementType::Value)
@@ -336,6 +388,41 @@ void MenuHandler::middleButtonAction()
                 drawMenu();
                 //if(!this->buzzDisabled) Device::buzz();
             }
+            else if(menu->children[menu->selectedChildIndex]->getType()==UIElementType::HorizontalMenu)
+            {
+                //if(!this->buzzDisabled) Device::buzz();
+                auto menuElement = std::static_pointer_cast<HorizontalMenuElement>(menu->children[menu->selectedChildIndex]);
+                
+                auto selectedElement = std::static_pointer_cast<UIHorizontalElement>(menuElement->children[menuElement->selectedChildIndex]);
+                if(selectedElement->getType()==UIElementType::DropdownSub)
+                {
+                    auto dropDownElement = std::static_pointer_cast<DropdownElement>(selectedElement);
+                    dropDownElement->selected = !dropDownElement->selected;
+                    if(!dropDownElement->selected) 
+                    {
+                        dropDownElement->writeValue();
+                        Device::getInstance().saveSettings();
+                        if(dropDownElement->action) dropDownElement->action();
+                    }
+                }
+
+                drawMenu();
+                //if(!this->buzzDisabled) Device::buzz();
+            }
+            // else if(menu->children[menu->selectedChildIndex]->getType()==UIElementType::Dropdown)
+            // {
+            //     //if(!this->buzzDisabled) Device::buzz();
+            //     auto dropDownElement = std::static_pointer_cast<DropdownElement>(menu->children[menu->selectedChildIndex]);
+            //     if(dropDownElement->selected) 
+            //     {
+            //         dropDownElement->writeValue();
+            //         Device::getInstance().saveSettings();
+            //         renderer->epd.forceRefresh();
+            //     }
+            //     dropDownElement->selected = !dropDownElement->selected;
+            //     drawMenu();
+            //     //if(!this->buzzDisabled) Device::buzz();
+            // }
         }
     }
 }
@@ -344,6 +431,23 @@ void MenuHandler::rightButtonAction()
 {
     auto menu = std::static_pointer_cast<MenuElement>(currentElement);
     if(menu->selectedChildIndex>=menu->children.size()) return;
+    if(menu->children.size()>0 && menu->children[menu->selectedChildIndex]->getType()==UIElementType::HorizontalMenu)
+    {
+        if(auto horizontalMenu = std::static_pointer_cast<HorizontalMenuElement>(menu->children[menu->selectedChildIndex]))
+        {
+            if(horizontalMenu->children.size()>0 && horizontalMenu->children[horizontalMenu->selectedChildIndex]->getType()==UIElementType::DropdownSub)
+            {
+                auto dropDownElement = std::static_pointer_cast<DropdownElement>(horizontalMenu->children[horizontalMenu->selectedChildIndex]);
+                if(dropDownElement->selected)
+                {
+                    dropDownElement->selected = false;
+                    dropDownElement->ReadValue();
+                    drawMenu();
+                    return;
+                }
+            }
+        }
+    }
     if(menu->children[menu->selectedChildIndex]->getType()==UIElementType::Value &&
     std::static_pointer_cast<ValueElement>(menu->children[menu->selectedChildIndex])->selected)
     {
@@ -359,6 +463,7 @@ void MenuHandler::rightButtonAction()
             //if(!this->buzzDisabled) Device::buzz();
             auto bookElement = std::static_pointer_cast<BookElement>(menu->children[menu->selectedChildIndex]);
             Book *book = bookElement->book;
+            if(!book) return; //this only happens when there is no recent book, which only happens on a fresh boot
 
             if(book->badParse)
             {
@@ -381,10 +486,18 @@ void MenuHandler::rightButtonAction()
             renderer->epd.forceRefresh();
             Device::getInstance().state=Device::State::Reading;
             Device::getInstance().activeBookPath = book->path;
-            Device::getInstance().activeAuthorName = menu->elementName;
+            Device::getInstance().recentBookPath = book->path;
+            //Device::getInstance().activeAuthorName = menu->elementName;
             Device::getInstance().saveAppState();
             reader->openPage();
             //if(!this->buzzDisabled) Device::buzz();
+    }
+    else if(menu->children[menu->selectedChildIndex]->getType()==UIElementType::HorizontalMenu)
+    {
+            //if(!this->buzzDisabled) Device::buzz();
+            auto element = std::static_pointer_cast<HorizontalMenuElement>(menu->children[menu->selectedChildIndex]);
+            if(element->selectedChildIndex < element->children.size()-1) element->selectedChildIndex++;
+            drawMenu();
     }
     else middleButtonAction();
 }
@@ -402,6 +515,23 @@ void MenuHandler::leftPageAction()
 void MenuHandler::leftButtonAction()
 {
     if (auto menu = std::static_pointer_cast<MenuElement>(currentElement)) {
+        if(menu->children.size()>0 && menu->children[menu->selectedChildIndex]->getType()==UIElementType::HorizontalMenu)
+        {
+            if(auto horizontalMenu = std::static_pointer_cast<HorizontalMenuElement>(menu->children[menu->selectedChildIndex]))
+            {
+                if(horizontalMenu->children.size()>0 && horizontalMenu->children[horizontalMenu->selectedChildIndex]->getType()==UIElementType::DropdownSub)
+                {
+                    auto dropDownElement = std::static_pointer_cast<DropdownElement>(horizontalMenu->children[horizontalMenu->selectedChildIndex]);
+                    if(dropDownElement->selected)
+                    {
+                        dropDownElement->selected = false;
+                        dropDownElement->ReadValue();
+                        drawMenu();
+                        return;
+                    }
+                }
+            }
+        }
         if(menu->children.size()>0 && menu->children[menu->selectedChildIndex]->getType()==UIElementType::Value &&
         std::static_pointer_cast<ValueElement>(menu->children[menu->selectedChildIndex])->selected)
         {
@@ -411,6 +541,13 @@ void MenuHandler::leftButtonAction()
             if(valueElement->selectedValueIndex<0) valueElement->selectedValueIndex += valueElement->values.size();
             drawValuePartial();
             //if(!this->buzzDisabled) Device::buzz();
+        }
+        else if(menu->children.size()>0 && menu->children[menu->selectedChildIndex]->getType()==UIElementType::HorizontalMenu && std::static_pointer_cast<HorizontalMenuElement>(menu->children[menu->selectedChildIndex])->selectedChildIndex>0)
+        {
+            //if(!this->buzzDisabled) Device::buzz();
+            auto element = std::static_pointer_cast<HorizontalMenuElement>(menu->children[menu->selectedChildIndex]);
+            if(element->selectedChildIndex > 0) element->selectedChildIndex--;
+            drawMenu();
         }
         else if (auto parent = menu->getParent()) {
             // parent is always a MenuElement
@@ -426,7 +563,7 @@ void MenuHandler::leftButtonAction()
 
             //if(!this->buzzDisabled) Device::buzz();
             this->currentElement = parent;
-            Device::getInstance().bookHandler->refreshFavorites();
+            //Device::getInstance().bookHandler->refreshFavorites();
             renderer->epd.forceRefresh();
             drawMenu();
             //if(!this->buzzDisabled) Device::buzz();
@@ -434,15 +571,87 @@ void MenuHandler::leftButtonAction()
     }
 }
 
-void MenuHandler::layoutReadMenu(std::vector<Author>& authorList)
+void MenuHandler::layoutLibraryMenu()
 {
-    authorMenu->children.clear(); //clear all the books
-    for(int i=0;i<authorList.size();i++) //fill in the authors and the books
+    libraryMenu->children.clear();
+
+    favoriteBooksFolder->initChildren();
+    libraryMenu->addChild(librarySubMenuElement);
+    libraryMenu->addChild(favoriteBooksFolder);
+
+
+    // Select the library groups based on the current sorting method
+    std::vector<Folder>* selectedFolders  = nullptr;
+
+    switch (Device::getInstance().deviceSettings.bookSortingMethod)
     {
-        auto authorElement = std::make_shared<AuthorElement>(renderer,&authorList[i]);
-        authorElement->initChildren();
-        this->authorMenu->addChild(authorElement);
+        case BookSortingMethod::Author:
+            selectedFolders  = &Device::getInstance().bookHandler->authorList;
+            break;
+
+        case BookSortingMethod::Folder:
+            selectedFolders  = &Device::getInstance().bookHandler->folderList;
+            break;
+
+        case BookSortingMethod::Alphabetical:
+            selectedFolders  = &Device::getInstance().bookHandler->alphabeticList;
+            break;
+
+        default:
+            return;
     }
+
+    // Create an alphabetically sorted copy
+    std::vector<Folder> sortedFolders = *selectedFolders;
+
+    std::sort(sortedFolders.begin(), sortedFolders.end(),
+        [](const Folder& a, const Folder& b) {
+            return a.name < b.name;
+        });
+
+    // Populate the menu
+    for (auto& folder : sortedFolders)
+    {
+        auto folderElement = std::make_shared<FolderElement>(renderer, &folder);
+        folderElement->initChildren();
+        libraryMenu->addChild(folderElement);
+    }
+}
+
+void MenuHandler::SetBookElementActive(Book* book)
+{
+    if (book == nullptr)
+        return;
+
+    // Skip the first element, which contains Favorites
+    for (size_t i = 1; i < libraryMenu->children.size(); i++)
+    {
+        if (libraryMenu->children[i]->getType() != UIElementType::Folder)
+            continue;
+
+        auto folderElement = std::static_pointer_cast<FolderElement>(
+            libraryMenu->children[i]);
+
+        for (size_t j = 0; j < folderElement->children.size(); j++)
+        {
+            if (folderElement->children[j]->getType() != UIElementType::Book)
+                continue;
+
+            auto bookElement = std::static_pointer_cast<BookElement>(
+                folderElement->children[j]);
+
+            if (bookElement->book == book)
+            {
+                currentElement = folderElement;
+                folderElement->selectedChildIndex = j;
+                return;
+            }
+        }
+    }
+}
+
+
+void MenuHandler::updateSettingsValues() {
     for(int i=0;i<readSettingsMenu->children.size();i++) //and update the values in the settings
     {
         if(readSettingsMenu->children[i]->getType()==UIElementType::Value)
@@ -458,6 +667,7 @@ void MenuHandler::layoutReadMenu(std::vector<Author>& authorList)
     {
         std::static_pointer_cast<ValueElement>(einkSettingsMenu->children[i])->ReadValue();
     }
+    std::static_pointer_cast<DropdownElement>(librarySubMenuElement->children[0])->ReadValue();
 }
 
 void MenuHandler::layoutFontSelect()
@@ -553,7 +763,7 @@ void MenuHandler::drawMenu()
     {
         const char *html = pageShowcase.getPage();
         HtmlParser *parser = nullptr;
-        parser = new HtmlParser(html, pageShowcase.size(), "",this->renderer,0,nullptr,rightPageFrameBuffer,Device::getInstance().reader->leftPageFrameBuffer); //dump the right page into the readers framebuffer
+        parser = new HtmlParser(html, pageShowcase.size(), "",0,nullptr,rightPageFrameBuffer,Device::getInstance().reader->leftPageFrameBuffer); //dump the right page into the readers framebuffer
         parser->parse();
         delete parser;
     }

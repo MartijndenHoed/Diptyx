@@ -1,5 +1,6 @@
 #include <htmlParser.h>
 #include <esp_log.h>
+#include "Device.h"
 
 //This code is a heavily modified version of Atomic 14's Epub reader
 static const char *TAG = "HTML Parser";
@@ -67,12 +68,12 @@ std::string resolve_relative_path(const std::string& base_file,
     return normalize_path(full_path);
 }
 
-HtmlParser::HtmlParser(const char *html, int length, const std::string &base_path,Renderer* renderer,int page, Epub *epub, unsigned char *leftScreenBuffer, unsigned char *rightScreenBuffer)
+HtmlParser::HtmlParser(const char *html, int length, const std::string &base_path,int page, EpubParser *epub, unsigned char *leftScreenBuffer, unsigned char *rightScreenBuffer)
 {
   this->base_path = base_path;
   this->targetPage = page;
   this->currentPage = 0;
-  this->renderer = renderer;
+  this->renderer = Device::getInstance().renderer;
   this->contentParser = new ContentParser(renderer);
   this->epub = epub;
   this->leftScreenBuffer = leftScreenBuffer;

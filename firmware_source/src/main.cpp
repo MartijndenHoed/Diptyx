@@ -28,7 +28,6 @@
 
 int64_t last_interaction_time = 0;
 int displayTimeOut = 10; //time in seconds before shutting down screens (in menus)
-bool safeboot = false;
 
 static const char *TAG = "EPD_MAIN";
 static SDCard *sd = nullptr;
@@ -123,7 +122,7 @@ void main_task(void *param) {
             if(esp_timer_get_time() - now> 3000000) //safeboot if pressed for more than 3 seconds
             {
                 notificationHandler->drawNotification("Entering safeboot");
-                safeboot = true;
+                device.safeBoot = true;
             }
         }
 
@@ -190,52 +189,36 @@ void main_task(void *param) {
     device.initADC();
     device.loadSettings();
     device.saveSettings();
-    if(safeboot) renderer->fontHandler.loadFont(renderer->fontHandler.families[0].fonts[0].fileName); //in safeboot we use unifont only
+    if(device.safeBoot) renderer->fontHandler.loadFont(renderer->fontHandler.families[0].fonts[0].fileName); //in safeboot we use unifont only
     else device.loadFont();
     bookHandler->listBooks();
-    menuHandler->layoutReadMenu(bookHandler->authorList); //load the book menu structure, and load the current settings values
+    menuHandler->updateSettingsValues();
+    menuHandler->layoutLibraryMenu(); //load the book menu structure, and load the current settings values
     menuHandler->updateFontSelect(); //and update the font options in the menu
     menuHandler->updateFontSize(); //and update the font size options
     
-    if(safeboot) device.state=Device::State::Menu; 
+    if(device.safeBoot) device.state=Device::State::Menu; 
 
     
     if(device.state==Device::State::Reading) //Here we check if there is actually a valid book loading
     {
-        if(device.activeAuthorIndex==-1 || device.activeBookIndex==-1 || (device.activeAuthorIndex==0 && bookHandler->authorList[0].bookList.size()==0))
-        {
-            device.state=Device::State::Menu; 
-        }
-        else
-        {
-            if(device.activeAuthorIndex>=bookHandler->authorList.size() || device.activeBookIndex >= (bookHandler->authorList[device.activeAuthorIndex]).bookList.size()) //double check if the book is actually accessible with these indices
-            {
-                device.state=Device::State::Menu; 
-            }
-            else
-            {
-                Book *book = (bookHandler->authorList[device.activeAuthorIndex]).bookList[device.activeBookIndex];
-                if(book->totalPageCount==0) device.state=Device::State::Menu; 
-            }
-            
-        }
+        Book *book = bookHandler->findBookByPath(device.activeBookPath);
+        if(book->totalPageCount==0) device.state=Device::State::Menu; 
     }
 
 
     if(device.state==Device::State::Menu)//boot into the bookmenu
     {
         menuHandler->drawMenu();
+        
     }
     else if(device.state==Device::State::Reading) //or boot into reading
     {
-        Book *book = (bookHandler->authorList[device.activeAuthorIndex]).bookList[device.activeBookIndex];
+        Book *book = bookHandler->findBookByPath(device.activeBookPath);
         reader->init(book,renderer);
-        // reader->chapterPageCounts = book->chapterPageCounts;
-        // reader->totalPages = book->totalPageCount;
-        // reader->currentPage = book->readPageCount;
         reader->openPage();
-        menuHandler->currentElement = menuHandler->authorMenu->children[device.activeAuthorIndex];
-        std::static_pointer_cast<MenuElement> (menuHandler->currentElement)->selectedChildIndex = device.activeBookIndex;
+        device.recentBookPath = book->path;
+        menuHandler->SetBookElementActive(book);
     }
     else if(device.state==Device::State::simpleReader) //or boot into the simplereader
     {
@@ -543,6 +526,7 @@ void buttonPoller(void *param) //the buttonpoller runs on a different core from 
         vTaskDelay(pdMS_TO_TICKS(30));
     }
 }
+
 
 
 extern "C" void app_main(void)

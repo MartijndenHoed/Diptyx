@@ -28,7 +28,7 @@ private:
     CSSCache cssCache;
     int currentPage = 0;
     int targetPage = 0;
-    Epub *epub = nullptr;
+    EpubParser *epub = nullptr;
     unsigned char *leftScreenBuffer;
     unsigned char *rightScreenBuffer;
     Encoding encoding = UTF8;
@@ -36,7 +36,7 @@ private:
 
 
 public:
-    HtmlParser(const char *html, int length, const std::string &base_path, Renderer* renderer, int page, Epub *epub, unsigned char *leftScreenBuffer=nullptr, unsigned char *rightScreenBuffer=nullptr);
+    HtmlParser(const char *html, int length, const std::string &base_path, int page, EpubParser *epub, unsigned char *leftScreenBuffer=nullptr, unsigned char *rightScreenBuffer=nullptr);
     ~HtmlParser();
 
     const char *htmlRaw;

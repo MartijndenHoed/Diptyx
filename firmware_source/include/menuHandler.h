@@ -25,7 +25,9 @@ class MenuHandler
         void rightPageAction();
         void leftPageAction();
 
-        void layoutReadMenu(std::vector<Author>& authorList);
+        void SetBookElementActive(Book* book);
+        void layoutLibraryMenu();
+        void updateSettingsValues();
         void layoutFontSelect();
         void updateFontSize();
         void updateFontSelect();
@@ -43,9 +45,11 @@ class MenuHandler
         std::shared_ptr<MenuElement> deviceSettingsMenu;
         std::shared_ptr<MenuElement> readSettingsMenu;
         std::shared_ptr<MenuElement> einkSettingsMenu;
-        std::shared_ptr<MenuElement> authorMenu; 
+        std::shared_ptr<MenuElement> libraryMenu; 
+        std::shared_ptr<HorizontalMenuElement> librarySubMenuElement; 
         std::shared_ptr<ValueElement> fontSelectBox; 
         std::shared_ptr<ValueElement> fontSizeBox; 
+        std::shared_ptr<FavoritesFolderElement> favoriteBooksFolder; 
 
         unsigned char* leftPageFrameBuffer;
         unsigned char* rightPageFrameBuffer;

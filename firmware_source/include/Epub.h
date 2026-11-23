@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include "fileParser.h"
 
 class ZipFile;
 
@@ -17,7 +18,7 @@ public:
   EpubTocEntry(std::string title, std::string href, std::string anchor, int level) : title(title), href(href), anchor(anchor), level(level) {}
 };
 
-class Epub
+class EpubParser: public FileParser
 {
 private:
   // the title read from the EPUB meta data
@@ -45,10 +46,21 @@ private:
   bool parse_nav_file(ZipFile &zip);
 
 public:
-  Epub(const std::string &path);
-  ~Epub() {}
+  EpubParser(const std::string& m_path);
+  ~EpubParser() {}
   std::string &get_base_path() { return m_base_path; }
-  bool load();
+  int getCurrentPageInChapter(int currentPage) override;
+  int getCurrentChapter(int currentPage) override;
+  bool load(Book *activeBook) override;
+  bool renderPageToBuffers(int pageNumber, unsigned char *leftScreenBuffer, unsigned char *rightScreenBuffer, int pageCacheIndex=1) override;
+  bool indexChapters() override;
+  int getTOCLength() override; 
+  int getChapterIndexFromTOCindex(int TOCitemIndex) override;
+  int getTocIndexFromChapterindex(int chapterIndex) override;
+  std::string getPath() override;
+  std::string getCoverImagePath() override;
+  std::string getTOCItemTitle(int chapterIndex) override;
+  
 
   const std::string &get_path() const { return m_path; }
   const std::string &get_title();

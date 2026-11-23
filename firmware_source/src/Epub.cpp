@@ -6,6 +6,7 @@
 #include "tinyxml2.h"
 #include "ZipFile.h"
 #include "Epub.h"
+#include "device.h"
 
 static const char *TAG = "EPUB";
 
@@ -20,7 +21,7 @@ static std::string decodePercent20(const char* s) {
     return out;
 }
 
-bool Epub::find_content_opf_file(ZipFile &zip, std::string &content_opf_file)
+bool EpubParser::find_content_opf_file(ZipFile &zip, std::string &content_opf_file)
 {
   // open up the meta data to find where the content.opf file lives
   char *meta_info = (char *)zip.read_file_to_memory("META-INF/container.xml");
@@ -117,7 +118,7 @@ std::string normalise_path(const std::string &path)
   return result;
 }
 
-bool Epub::parse_content_opf(ZipFile &zip, std::string &content_opf_file)
+bool EpubParser::parse_content_opf(ZipFile &zip, std::string &content_opf_file)
 {
   // read in the content.opf file and parse it
   char *contents = (char *)zip.read_file_to_memory(content_opf_file.c_str());
@@ -130,18 +131,14 @@ bool Epub::parse_content_opf(ZipFile &zip, std::string &content_opf_file)
     ESP_LOGE(TAG, "Error parsing content.opf - %s", doc.ErrorIDToName(result));
     return false;
   }
-  auto package = doc.FirstChildElement("package");
+  auto package = doc.FirstChildElementIgnoreNamespace("package");
   if (!package)
   {
     ESP_LOGE(TAG, "Could not find package element in content.opf");
     return false;
   }
   // get the metadata - title and cover image
-  auto metadata = package->FirstChildElement("metadata");
-  if (!metadata)
-  {
-      metadata = package->FirstChildElement("opf:metadata");
-  }
+  auto metadata = package->FirstChildElementIgnoreNamespace("metadata");
   if (!metadata)
   {
     ESP_LOGE(TAG, "Missing metadata");
@@ -154,14 +151,47 @@ bool Epub::parse_content_opf(ZipFile &zip, std::string &content_opf_file)
     m_title = std::string(m_path);
   }
   else m_title = title->GetText();
+  
   auto author = metadata->FirstChildElement("dc:creator");
+
   if (!author)
   {
-    ESP_LOGE(TAG, "Missing author");
-    m_author = std::string("unknown author");
+      ESP_LOGE(TAG, "Missing author");
+      m_author = std::string("unknown author");
   }
-  else m_author = author->GetText();
-  auto cover = metadata->FirstChildElement("meta");
+  else
+  {
+      auto creator = author;
+      bool authorFound = false;
+
+      for (auto current = author; current && !authorFound; current = current->NextSiblingElement("dc:creator"))
+      {
+          const char* id = current->Attribute("id");
+          if (!id) continue;
+
+          for (auto meta = metadata->FirstChildElement("meta"); meta; meta = meta->NextSiblingElement("meta"))
+          {
+              const char* refines = meta->Attribute("refines");
+              const char* property = meta->Attribute("property");
+              const char* role = meta->GetText();
+
+              if (refines && property && role &&
+                  std::string(refines) == std::string("#") + id &&
+                  std::string(property) == "role" &&
+                  std::string(role) == "aut")
+              {
+                  creator = current;
+                  authorFound = true;
+                  break;
+              }
+          }
+      }
+
+      m_author = creator->GetText() ? creator->GetText() : "unknown author";
+  }
+
+
+  auto cover = metadata->FirstChildElementIgnoreNamespace("meta");
 while (cover)
 {
     const char* nameAttr = cover->Attribute("name");
@@ -172,7 +202,7 @@ while (cover)
     }
     
     // Otherwise, keep looking at the next sibling
-    cover = cover->NextSiblingElement("meta");
+    cover = cover->NextSiblingElementIgnoreNamespace("meta");
 }
   if (!cover)
   {
@@ -183,7 +213,7 @@ while (cover)
   // the manifest gives us the names of the files
   // the spine gives us the order of the files
   // we can then read the files in the order they are in the spine
-  auto manifest = package->FirstChildElement("manifest");
+  auto manifest = package->FirstChildElementIgnoreNamespace("manifest");
   if (!manifest)
   {
     ESP_LOGE(TAG, "Missing manifest");
@@ -221,7 +251,7 @@ while (cover)
     item = item->NextSiblingElementIgnoreNamespace("item");
   }
   // find the spine
-  auto spine = package->FirstChildElement("spine");
+  auto spine = package->FirstChildElementIgnoreNamespace("spine");
   if (!spine)
   {
     ESP_LOGE(TAG, "Missing spine");
@@ -245,7 +275,7 @@ while (cover)
   }
   
   // read the spine
-  auto itemref = spine->FirstChildElement("itemref");
+  auto itemref = spine->FirstChildElementIgnoreNamespace("itemref");
   while (itemref)
   {
     auto id = itemref->Attribute("idref");
@@ -253,201 +283,286 @@ while (cover)
     {
       m_spine.push_back(std::make_pair(id, items[id]));
     }
-    itemref = itemref->NextSiblingElement("itemref");
+    itemref = itemref->NextSiblingElementIgnoreNamespace("itemref");
   }
   
   return true;
 }
 
-bool Epub::parse_toc_ncx_file(ZipFile &zip)
+bool EpubParser::parse_toc_ncx_file(ZipFile &zip)
 {
-  // the ncx file should have been specified in the content.opf file
-  if (m_toc_ncx_item.empty())
-  {
-    ESP_LOGE(TAG, "No ncx file specified");
-    return false;
-  }
-  ESP_LOGI(TAG, "toc path: %s\n", m_toc_ncx_item.c_str());
-  char *ncx_data = (char *)zip.read_file_to_memory(m_toc_ncx_item.c_str());
-  if (!ncx_data)
-  {
-    ESP_LOGE(TAG, "Could not find %s", m_toc_ncx_item.c_str());
-    return false;
-  }
-  // Parse the Toc contents
-  tinyxml2::XMLDocument doc;
-  auto result = doc.Parse(ncx_data);
-  free(ncx_data);
-  if (result != tinyxml2::XML_SUCCESS)
-  {
-    ESP_LOGE(TAG, "Error parsing toc %s", doc.ErrorIDToName(result));
-    return false;
-  }
-  auto ncx = doc.FirstChildElement("ncx");
-  if (!ncx)
-  {
-    ESP_LOGE(TAG, "Could not find first child ncx in toc");
-    return false;
-  }
-
-  auto navMap = ncx->FirstChildElement("navMap");
-  if (!navMap)
-  {
-    ESP_LOGE(TAG, "Could not find navMap child in ncx");
-    return false;
-  }
-
-  auto navPoint = navMap->FirstChildElement("navPoint");
-  // Fills toc_index map
-  while (navPoint)
-  {
-    // navPoint has also an id & playOrder element: navPoint->Attribute("id");
-    auto navLabel = navPoint->FirstChildElement("navLabel")->FirstChildElement("text")->FirstChild();
-    std::string title = "";
-    if(navLabel && navLabel->Value()) 
+    // The ncx file should have been specified in the content.opf file
+    if (m_toc_ncx_item.empty())
     {
-      title = navLabel->Value();
+        ESP_LOGE(TAG, "No ncx file specified");
+        return false;
     }
-    auto content = navPoint->FirstChildElement("content");
-    std::string src = decodePercent20(content ? content->Attribute("src") : nullptr); //In case a publisher gets the idea in their thick skull to use spaces in filenames
-std::string href = m_base_path + src;
-    // split the href on the # to get the href and the anchor
-    size_t pos = href.find('#');
-    std::string anchor = "";
-    if (pos != std::string::npos)
+
+    ESP_LOGI(TAG, "toc path: %s\n", m_toc_ncx_item.c_str());
+
+    char *ncx_data = (char *)zip.read_file_to_memory(m_toc_ncx_item.c_str());
+    if (!ncx_data)
     {
-      anchor = href.substr(pos + 1);
-      href = href.substr(0, pos);
+        ESP_LOGE(TAG, "Could not find %s", m_toc_ncx_item.c_str());
+        return false;
     }
-    m_toc.push_back(EpubTocEntry(title, href, anchor, 0));
-    ESP_LOGI(TAG, "%s -> %s#%s", title.c_str(), href.c_str(), anchor.c_str());
-    navPoint = navPoint->NextSiblingElement("navPoint");
-  }
-  return true;
-}
 
-bool Epub::parse_nav_file(ZipFile &zip)
-{
-  // the ncx file should have been specified in the content.opf file
-  if (m_nav_item.empty())
-  {
-    ESP_LOGE(TAG, "No nav file specified");
-    return false;
-  }
-  ESP_LOGI(TAG, "nav path: %s\n", m_nav_item.c_str());
-  char *nav_data = (char *)zip.read_file_to_memory(m_nav_item.c_str());
-  if (!nav_data)
-  {
-    ESP_LOGE(TAG, "Could not find %s", m_nav_item.c_str());
-    return false;
-  }
-  // Parse the Toc contents
-  tinyxml2::XMLDocument doc;
-  auto result = doc.Parse(nav_data);
-  free(nav_data);
-  if (result != tinyxml2::XML_SUCCESS)
-  {
-    ESP_LOGE(TAG, "Error parsing toc %s", doc.ErrorIDToName(result));
-    return false;
-  }
-  auto html = doc.FirstChildElement("html");
-  if (!html)
-  {
-    ESP_LOGE(TAG, "Could not find first child html in toc");
-    return false;
-  }
+    // Parse the TOC contents
+    tinyxml2::XMLDocument doc;
+    auto result = doc.Parse(ncx_data);
+    free(ncx_data);
 
-  auto body = html->FirstChildElement("body");
-  if (!body)
-  {
-    ESP_LOGE(TAG, "Could not find body child in html");
-    return false;
-  }
+    if (result != tinyxml2::XML_SUCCESS)
+    {
+        ESP_LOGE(TAG, "Error parsing toc %s", doc.ErrorIDToName(result));
+        return false;
+    }
 
-  auto nav = body->FirstChildElement("nav");
-  // Fills toc_index map
-  while (nav)
-  {
-      const char* typeAttr = nav->Attribute("epub:type");
-      if (typeAttr && strcmp(typeAttr, "toc") == 0)
-      {
-        auto ol = nav->FirstChildElement("ol");
-        if (!ol)
+    auto ncx = doc.FirstChildElement("ncx");
+    if (!ncx)
+    {
+        ESP_LOGE(TAG, "Could not find first child ncx in toc");
+        return false;
+    }
+
+    auto navMap = ncx->FirstChildElement("navMap");
+    if (!navMap)
+    {
+        ESP_LOGE(TAG, "Could not find navMap child in ncx");
+        return false;
+    }
+
+    // Recursive function to process navPoints and their children
+    std::function<void(tinyxml2::XMLElement*, int)> processNavPoint;
+
+    processNavPoint = [&](tinyxml2::XMLElement *navPoint, int depth)
+    {
+        while (navPoint)
         {
-          ESP_LOGE(TAG, "Could not find ol child in nav");
-          return false;
-        }
-        auto li = ol->FirstChildElement("li");
-        if (!li)
-        {
-          ESP_LOGE(TAG, "Could not find li child in ol");
-          //return false;
-        }
-        while(li)
-        {
-          auto a = li->FirstChildElement("a");
-          if(a)
-          {
+            auto navLabelElement = navPoint->FirstChildElement("navLabel");
+            auto textElement = navLabelElement
+                ? navLabelElement->FirstChildElement("text")
+                : nullptr;
 
+            auto navLabel = textElement ? textElement->FirstChild() : nullptr;
 
-            const char* text = a->GetText();
-
-            std::string title = text ? text : "";
-
-            const char* hrefAttr = a->Attribute("href");
-
-            if (!hrefAttr)
+            std::string title = "";
+            if (navLabel && navLabel->Value())
             {
-                ESP_LOGE(TAG, "Missing href in nav a element");
-                li = li->NextSiblingElement("li");
-                continue;
+                title = navLabel->Value();
             }
 
-            std::string src = decodePercent20(hrefAttr);
+            // Indent subchapters with a leading space
+            if (depth > 0)
+            {
+                title.insert(0, "·");
+            }
 
-            // Split the href on the # to get the path and anchor
-            size_t pos = src.find('#');
+            auto content = navPoint->FirstChildElement("content");
+            std::string src = decodePercent20(
+                content ? content->Attribute("src") : nullptr
+            );
+
+            std::string href = m_base_path + src;
+
+            // Split the href on # to get the href and anchor
+            size_t pos = href.find('#');
             std::string anchor = "";
 
             if (pos != std::string::npos)
             {
-                anchor = src.substr(pos + 1);
-                src = src.substr(0, pos);
+                anchor = href.substr(pos + 1);
+                href = href.substr(0, pos);
             }
-
-            // Get the directory containing the nav document
-            std::string navBasePath =
-                m_nav_item.substr(0, m_nav_item.find_last_of('/') + 1);
-
-            std::string href = normalise_path( navBasePath + src);
 
             m_toc.push_back(EpubTocEntry(title, href, anchor, 0));
 
             ESP_LOGI(TAG, "%s -> %s#%s",
-                    title.c_str(), href.c_str(), anchor.c_str());
-          }
-          else
-          {
-            ESP_LOGE(TAG, "Missing a element in nav li");
-          }
-          li = li->NextSiblingElement("li");
+                     title.c_str(), href.c_str(), anchor.c_str());
+
+            // Process nested navPoints (subchapters)
+            auto childNavPoint = navPoint->FirstChildElement("navPoint");
+            if (childNavPoint)
+            {
+                processNavPoint(childNavPoint, depth + 1);
+            }
+
+            navPoint = navPoint->NextSiblingElement("navPoint");
         }
+    };
 
+    // Process top-level chapters
+    auto navPoint = navMap->FirstChildElement("navPoint");
+    processNavPoint(navPoint, 0);
 
-      }
-      nav = nav->NextSiblingElement("nav");
-  }
-  return true;
+    return true;
 }
 
-Epub::Epub(const std::string &path) : m_path(path)
+bool EpubParser::parse_nav_file(ZipFile &zip)
+{
+    // The nav file should have been specified in the content.opf file
+    if (m_nav_item.empty())
+    {
+        ESP_LOGE(TAG, "No nav file specified");
+        return false;
+    }
+
+    ESP_LOGI(TAG, "nav path: %s\n", m_nav_item.c_str());
+
+    char *nav_data = (char *)zip.read_file_to_memory(m_nav_item.c_str());
+    if (!nav_data)
+    {
+        ESP_LOGE(TAG, "Could not find %s", m_nav_item.c_str());
+        return false;
+    }
+
+    // Parse the TOC contents
+    tinyxml2::XMLDocument doc;
+    auto result = doc.Parse(nav_data);
+    free(nav_data);
+
+    if (result != tinyxml2::XML_SUCCESS)
+    {
+        ESP_LOGE(TAG, "Error parsing toc %s", doc.ErrorIDToName(result));
+        return false;
+    }
+
+    auto html = doc.FirstChildElement("html");
+    if (!html)
+    {
+        ESP_LOGE(TAG, "Could not find first child html in toc");
+        return false;
+    }
+
+    auto body = html->FirstChildElement("body");
+    if (!body)
+    {
+        ESP_LOGE(TAG, "Could not find body child in html");
+        return false;
+    }
+
+    auto nav = body->FirstChildElement("nav");
+
+    // Get the directory containing the nav document
+    std::string navBasePath =
+        m_nav_item.substr(0, m_nav_item.find_last_of('/') + 1);
+
+    // Recursive function to process li elements and their nested ol elements
+    std::function<void(tinyxml2::XMLElement*, int)> processListItems;
+
+    processListItems = [&](tinyxml2::XMLElement *li, int depth)
+    {
+        while (li)
+        {
+            auto a = li->FirstChildElement("a");
+
+            if (a)
+            {
+                const char* text = a->GetText();
+                std::string title = text ? text : "";
+
+                // Indent subchapters with a leading space
+                if (depth > 0)
+                {
+                    title.insert(0, "·");
+                }
+
+                const char* hrefAttr = a->Attribute("href");
+
+                if (!hrefAttr)
+                {
+                    ESP_LOGE(TAG, "Missing href in nav a element");
+                }
+                else
+                {
+                    std::string src = decodePercent20(hrefAttr);
+
+                    // Split the href on # to get the path and anchor
+                    size_t pos = src.find('#');
+                    std::string anchor = "";
+
+                    if (pos != std::string::npos)
+                    {
+                        anchor = src.substr(pos + 1);
+                        src = src.substr(0, pos);
+                    }
+
+                    std::string href = normalise_path(navBasePath + src);
+
+                    m_toc.push_back(EpubTocEntry(title, href, anchor, 0));
+
+                    ESP_LOGI(TAG, "%s -> %s#%s",
+                             title.c_str(), href.c_str(), anchor.c_str());
+                }
+            }
+            else
+            {
+                ESP_LOGE(TAG, "Missing a element in nav li");
+            }
+
+            // Process nested subchapters
+            auto ol = li->FirstChildElement("ol");
+
+            if (ol)
+            {
+                auto childLi = ol->FirstChildElement("li");
+
+                if (childLi)
+                {
+                    processListItems(childLi, depth + 1);
+                }
+            }
+
+            li = li->NextSiblingElement("li");
+        }
+    };
+
+    // Find the TOC navigation element
+    while (nav)
+    {
+        const char* typeAttr = nav->Attribute("epub:type");
+
+        if (typeAttr && strcmp(typeAttr, "toc") == 0)
+        {
+            auto ol = nav->FirstChildElement("ol");
+
+            if (!ol)
+            {
+                ESP_LOGE(TAG, "Could not find ol child in nav");
+                return false;
+            }
+
+            auto li = ol->FirstChildElement("li");
+
+            if (!li)
+            {
+                ESP_LOGE(TAG, "Could not find li child in ol");
+            }
+            else
+            {
+                processListItems(li, 0);
+            }
+        }
+
+        nav = nav->NextSiblingElement("nav");
+    }
+
+    return true;
+}
+
+EpubParser::EpubParser(const std::string &path)
+    : FileParser(path),
+      m_path(path)
 {
 }
 
 // load in the meta data for the epub file
-bool Epub::load()
+bool EpubParser::load(Book *activeBook)
 {
+  ESP_LOGE(TAG, "loading EPUB: %s", m_path.c_str());
+  this->activeBook = activeBook;
   ZipFile zip(m_path.c_str());
+  ESP_LOGE(TAG, "loading EPUB: %s", m_path.c_str());
   std::string content_opf_file;
   if (!find_content_opf_file(zip, content_opf_file))
   {
@@ -478,29 +593,160 @@ bool Epub::load()
     ESP_LOGE(TAG, "No ncx or nav file specified");
     return false;
   }
-
+  activeBook->author = get_author();
+  activeBook->title = get_title();
+  activeBook->path = get_path();
 
 
   return true;
 }
 
-const std::string &Epub::get_title()
+int EpubParser::getCurrentPageInChapter(int currentPage)
+{
+  int pageCounter = currentPage;
+  for(int i = 0;i<this->get_spine_items_count();i++)
+  {
+        if(pageCounter<activeBook->chapterPageCounts[i]) return pageCounter;
+        pageCounter-= activeBook->chapterPageCounts[i];
+  }
+  return 0;
+}
+
+std::string EpubParser::getPath() {
+  return get_path();
+}
+
+std::string EpubParser::getCoverImagePath() {
+  return get_cover_image_item();
+}
+
+int EpubParser::getCurrentChapter(int currentPage)
+{
+    int pageCounter = currentPage;
+    for(int i = 0;i<this->get_spine_items_count();i++)
+    {
+        pageCounter-= activeBook->chapterPageCounts[i];
+        if(pageCounter<0) return i;
+    }
+    return 0;
+}
+
+bool EpubParser::renderPageToBuffers(int pageNumber, unsigned char *leftScreenBuffer, unsigned char *rightScreenBuffer, int pageCacheIndex)
+{
+  int currentPageInChapter = getCurrentPageInChapter(pageNumber);
+  int currentChapter = getCurrentChapter(pageNumber);
+  std::string currentChapterPath = get_spine_item(currentChapter);
+  char *html = reinterpret_cast<char *>(get_item_contents(currentChapterPath));
+  if(html)
+    {
+        Device::getInstance().renderer->clearScreenBuffer(leftScreenBuffer);
+        Device::getInstance().renderer->clearScreenBuffer(rightScreenBuffer);
+        HtmlParser *parser = nullptr;
+        parser = new HtmlParser(html, strlen(html), currentChapterPath,currentPageInChapter,this,leftScreenBuffer,rightScreenBuffer);
+        parser->cachedImages = activeBook->cachedImages;
+        parser->parse();
+        pageElementIndex[pageCacheIndex] = parser->currentElementIndex;
+        pageChapterIndex[pageCacheIndex] = currentChapter;
+        pageImagePresent[pageCacheIndex] = parser->imagePresentOnPage;
+        free(html);
+        delete parser;
+        return true;
+    }
+
+  return false;
+}
+
+bool EpubParser::indexChapters()
+{
+    activeBook->chapterPageCounts.clear();
+    activeBook->cachedImages.clear();
+    activeBook->totalPageCount = 0;
+    activeBook->chapterCount = get_spine_items_count();
+    float percent = 0;
+    float prevPercent = 0;
+    ESP_LOGI(TAG, "indexing %d chapters", activeBook->chapterCount);
+    for(int i=0;i<get_spine_items_count();i++)
+    {
+        //ESP_LOGI(TAG, "indexing chapter %d out of %d", i,get_spine_items_count());
+        percent += 1/float(get_spine_items_count());
+        if(percent>=prevPercent+0.1) 
+        {
+            prevPercent += 0.1;
+            if(!(Device::getInstance().state == Device::State::simpleReader)) Device::getInstance().notificationHandler->drawIndexingNotification(activeBook->title,int(100*percent));
+        }
+        std::string currentChapterPath = get_spine_item(i);
+        char *html = reinterpret_cast<char *>(get_item_contents(currentChapterPath));
+        if(html)
+        {
+            HtmlParser *parser = nullptr;
+            ESP_LOGI(TAG, "render Chapter: %s", currentChapterPath.c_str());
+            parser = new HtmlParser(html, strlen(html), currentChapterPath,-2,this,nullptr,nullptr);
+            parser->indexingMode = true;
+            parser->currentChapterIndex = i;
+            parser->currentChapterStartPageIndex = activeBook->totalPageCount;
+            parser->bookMarks = activeBook->bookMarks;
+            parser->cachedImages = activeBook->cachedImages;
+            Book::BookMark currentPageData = Book::BookMark(activeBook->currentPage,activeBook->currentPageChapterIndex,activeBook->currentPageElementIndex);
+            parser->bookMarks.push_back(currentPageData);
+            ESP_LOGI(TAG, "requested element: %d", activeBook->currentPageElementIndex);
+            parser->parse();
+            if(activeBook->currentPageChapterIndex==i) 
+            {
+                activeBook->currentPage = parser->bookMarks[parser->bookMarks.size()-1].pageIndex;
+                if(activeBook->currentPage%2) activeBook->currentPage-=1;
+            }
+            parser->bookMarks.pop_back();
+            activeBook->bookMarks = parser->bookMarks;
+            activeBook->cachedImages = parser->cachedImages;
+            int pageCount = (parser->pageReturn+1);
+            if(pageCount%2) pageCount+=1;
+            activeBook->chapterPageCounts.push_back(pageCount);
+            activeBook->totalPageCount += pageCount;
+            free(html);
+            delete parser;
+        } 
+    }
+    return true;
+}
+
+int EpubParser::getTOCLength()
+{
+  return get_toc_items_count();
+}
+
+int EpubParser::getChapterIndexFromTOCindex(int TOCitemIndex)
+{
+  return get_spine_index_for_toc_index(TOCitemIndex);
+}
+
+int EpubParser::getTocIndexFromChapterindex(int chapterIndex)
+{
+  return get_toc_index_for_spine_index(chapterIndex);
+}
+
+
+std::string EpubParser::getTOCItemTitle(int TOCitemIndex)
+{
+  return get_toc_item(TOCitemIndex).title;
+}
+
+const std::string &EpubParser::get_title()
 {
   return m_title;
 }
 
-const std::string &Epub::get_author()
+const std::string &EpubParser::get_author()
 {
   return m_author;
 }
 
-const std::string &Epub::get_cover_image_item()
+const std::string &EpubParser::get_cover_image_item()
 {
   return m_cover_image_item;
 }
 
 
-uint8_t *Epub::get_item_contents(const std::string &item_href, size_t *size)
+uint8_t *EpubParser::get_item_contents(const std::string &item_href, size_t *size)
 {
   ZipFile zip(m_path.c_str());
   std::string path = normalise_path(item_href);
@@ -513,12 +759,12 @@ uint8_t *Epub::get_item_contents(const std::string &item_href, size_t *size)
   return content;
 }
 
-int Epub::get_spine_items_count()
+int EpubParser::get_spine_items_count()
 {
   return m_spine.size();
 }
 
-std::string &Epub::get_spine_item(int spine_index)
+std::string &EpubParser::get_spine_item(int spine_index)
 {
   if (spine_index < 0 || spine_index >= static_cast<int>(m_spine.size())) {
       ESP_LOGI(TAG, "get_spine_item index:%d is out_of_range", spine_index);
@@ -527,18 +773,18 @@ std::string &Epub::get_spine_item(int spine_index)
   return m_spine[spine_index].second;
 }
 
-EpubTocEntry &Epub::get_toc_item(int toc_index)
+EpubTocEntry &EpubParser::get_toc_item(int toc_index)
 {
   return m_toc[toc_index];
 }
 
-int Epub::get_toc_items_count()
+int EpubParser::get_toc_items_count()
 {
   return m_toc.size();
 }
 
 // work out the section index for a toc index
-int Epub::get_spine_index_for_toc_index(int toc_index)
+int EpubParser::get_spine_index_for_toc_index(int toc_index)
 {
   // the toc entry should have an href that matches the spine item
   // so we can find the spine index by looking for the href
@@ -554,7 +800,7 @@ int Epub::get_spine_index_for_toc_index(int toc_index)
   return 0;
 }
 
-int Epub::get_toc_index_for_spine_index(int spine_index)
+int EpubParser::get_toc_index_for_spine_index(int spine_index)
 {
   // the toc entry should have an href that matches the spine item
   // so we can find the spine index by looking for the href
@@ -569,3 +815,5 @@ int Epub::get_toc_index_for_spine_index(int spine_index)
   // not found - default to the start of the book
   return -1;
 }
+
+

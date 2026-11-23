@@ -4,7 +4,7 @@
 #include <vector>
 #include <string.h>
 #include "htmlParser.h"
-#include <Epub.h>
+#include <fileParser.h>
 #include "bookHandler.h"
 #include "bookMarkMenuHandler.h"
 extern "C" {
@@ -29,14 +29,11 @@ public:
 
     void init(Book *book,Renderer* renderer);
     void indexPages(void);
-    int renderPages(unsigned char* leftPageFrameBuffer,unsigned char* rightPageFrameBuffer,int pageCacheIndex);
+    bool renderPages(unsigned char* leftPageFrameBuffer,unsigned char* rightPageFrameBuffer,int pageCacheIndex);
     std::string currentBookPath;
     std::string currentChapterPath;
     State state = State::Reading;
 
-    std::vector <int> pageChapterIndex {0,0,0};
-    std::vector <int> pageElementIndex {0,0,0};
-    std::vector <bool> pageImagePresent {false,false,false};
     bool imagePreviouslyPresent = false;
 
     //int currentPage = 0;
@@ -44,9 +41,9 @@ public:
     //std::vector<int> chapterPageCounts;
     //int chapterCount = 0;
     //int totalPages = 0;
-    int getCurrentPageAbsolute(int chapter, int page);
-    int getCurrentChapter(int page);
-    int getCurrentPageInChapter(int page);
+    // int getCurrentPageAbsolute(int chapter, int page);
+    // int getCurrentChapter(int page);
+    // int getCurrentPageInChapter(int page);
     void nextChapter(void);
     void prevChapter(void);
     void nextPage(void);
@@ -65,7 +62,7 @@ public:
     bool checkBookMark();
     int findCurrentBookMarkIndex();
 
-    Epub *epub = nullptr;
+    std::unique_ptr<FileParser> fileParser;
     Renderer* renderer = nullptr;
     BookMarkMenuHandler *bookMarkMenuHandler = nullptr;
     Book *book = nullptr;

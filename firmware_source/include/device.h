@@ -50,6 +50,7 @@ public:
         int sunlightFullRefresh = 0;
         int vcomLeft = 23;
         int vcomRight = 23;
+        BookSortingMethod bookSortingMethod = BookSortingMethod::Author;
     };
 
     // Access the singleton instance
@@ -91,11 +92,11 @@ public:
     Renderer *renderer = nullptr;
     NotificationHandler *notificationHandler = nullptr;
     SDCard *sd = nullptr;
+    bool safeBoot = false;
 
-    std::string activeBookPath;
-    std::string activeAuthorName;
-    int activeBookIndex = -1;
-    int activeAuthorIndex = -1;
+    std::string activeBookPath; //active book is the book that is now opened, which can also be the manual
+    std::string recentBookPath; //recent book is the book that will be displayed under 'open recent', which is never the manual
+    
     volatile int buttonStates[7] = {0};
     volatile int buttonLatchedStates[7] = {0};
 
@@ -132,6 +133,9 @@ public:
     void setLatchTimeOut(int duration);
     void pollButtons();
     volatile int latchTimeOut = 0;
+
+    //Book* recentBook = nullptr;
+    //std::string recentBookPath;
     //void pollButtonsLatching();
 
     int rightButtonState = 1;

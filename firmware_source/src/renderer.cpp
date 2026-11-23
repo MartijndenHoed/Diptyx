@@ -465,7 +465,7 @@ void Renderer::renderChecker(void)
 
 int Renderer::drawCharacter(int x, int y, int UTF8Index, bool bold,bool italics, int size,bool color, bool uniFont)
 {
-    if(uniFont || !fontHandler.checkCharExist(UTF8Index))
+    if(uniFont || !fontHandler.checkCharExist(UTF8Index)) //draw the character as unifont
     {
         const char* glyphData = fontHandler.getChar(UTF8Index);
         bool wideGlyph = fontHandler.getCharWidth(UTF8Index) -1;
@@ -484,20 +484,20 @@ int Renderer::drawCharacter(int x, int y, int UTF8Index, bool bold,bool italics,
                 {
                 int byteIndex = j + int(i<8)*16;
                 int bitIndex = i%8;
-                if((glyphData[byteIndex] >> bitIndex) & 1) this->drawSquare(coordx,coordy,size,size,!color);
+                if((glyphData[byteIndex] >> bitIndex) & 1) this->drawRectangle(coordx,coordy,size,size,color);
                 }
                 else
                 {
                 int byteIndex = (j*2) + int(i<8);
                 int bitIndex = i%8;
-                if((glyphData[byteIndex] >> bitIndex) & 1) this->drawSquare(coordx,coordy,size,size,!color);
+                if((glyphData[byteIndex] >> bitIndex) & 1) this->drawRectangle(coordx,coordy,size,size,color);
                 }
             }
         }
         if(bold) this->drawCharacter(x+size,y,UTF8Index, false,italics,size,color);
         return (8 + 8*wideGlyph)*size;
     }
-    else
+    else //draw the character from the loaded .yaff font
     {
         if(UTF8Index>9999 && fontHandler.uniFontEnabled==false) return 0;
         int width = fontHandler.getFontCharBitmapWidth(UTF8Index);
@@ -509,7 +509,7 @@ int Renderer::drawCharacter(int x, int y, int UTF8Index, bool bold,bool italics,
             {
                 if(italics) italicsOffset = (j-height/2)/2;
                 int pixelIndex = i+(height-j-1)*width;
-                if(fontHandler.getFontChar(UTF8Index,pixelIndex)) drawSquare(x+(i+fontHandler.getLeftBearing(UTF8Index)+italicsOffset)*size,y+j*size,size,size,!color);
+                if(fontHandler.getFontChar(UTF8Index,pixelIndex)) drawRectangle(x+(i+fontHandler.getLeftBearing(UTF8Index)+italicsOffset)*size,y+(j+fontHandler.getShiftUp(UTF8Index))*size,size,size,color);
                 
             }
             
@@ -565,7 +565,7 @@ void Renderer::drawString(int x, int y, std::vector<int> intArray, int size, std
 }
 
 
-void Renderer::drawSquare(int startx, int starty, int lengthx, int lengthy, bool value)
+void Renderer::drawRectangle(int startx, int starty, int lengthx, int lengthy, bool ink)
 {
     for(long i=0;i<lengthx;i++)
     {
@@ -573,7 +573,7 @@ void Renderer::drawSquare(int startx, int starty, int lengthx, int lengthy, bool
         {
             int coordx = startx + i;
             int coordy = starty + j;
-            this->drawPixel(coordx,coordy,value);
+            this->drawPixel(coordx,coordy,ink);
         }
     }
 }
@@ -582,17 +582,17 @@ void Renderer::drawPaddedBox(int startx, int starty, int lengthx, int lengthy, i
 {
     if (!value) {
         // Just fill the whole box
-        drawSquare(startx, starty, lengthx, lengthy, false);
+        drawRectangle(startx, starty, lengthx, lengthy, true);
     } else {
         // Draw the border as four strips
         // Top
-        drawSquare(startx, starty, lengthx, padding, false);
+        drawRectangle(startx, starty, lengthx, padding, true);
         // Bottom
-        drawSquare(startx, starty + lengthy - padding, lengthx, padding, false);
+        drawRectangle(startx, starty + lengthy - padding, lengthx, padding, true);
         // Left
-        drawSquare(startx, starty + padding, padding, lengthy - 2 * padding, false);
+        drawRectangle(startx, starty + padding, padding, lengthy - 2 * padding, true);
         // Right
-        drawSquare(startx + lengthx - padding, starty + padding, padding, lengthy - 2 * padding, false);
+        drawRectangle(startx + lengthx - padding, starty + padding, padding, lengthy - 2 * padding, true);
     }
 }
 
@@ -629,7 +629,7 @@ void Renderer::drawTextBox(int y, std::string line1, bool line1Bold,std::string 
     drawString(originX + GLYPH_WIDTH/2, y + 0.5*GLYPH_HEIGHT + padding,line3,1,line3Bold,false,!inverted);
 }
 
-void Renderer::drawPixel(int x, int y, bool value)
+void Renderer::drawPixel(int x, int y, bool ink)
 {
     if (x < 0 || x >= EPD_HEIGHT) return;
     if (y < 0 || y >= EPD_WIDTH) return;
@@ -640,13 +640,13 @@ void Renderer::drawPixel(int x, int y, bool value)
     int byteLoc = (flippedY / 8) + flippedX * (EPD_WIDTH / 8);
     int bitLoc = 7 - (flippedY % 8);
 
-    if (!value)
+    if (ink)
         framebuffer[byteLoc] |= (1 << bitLoc);
     else
         framebuffer[byteLoc] &= ~(1 << bitLoc);
 }
 
-void Renderer::drawBookMark(unsigned char* framebuffer,bool value)
+void Renderer::drawBookMark(unsigned char* framebuffer,bool ink)
 {
     this->framebuffer = framebuffer;
     int size = 50;
@@ -654,7 +654,7 @@ void Renderer::drawBookMark(unsigned char* framebuffer,bool value)
     {
         for(int y=0;y<size;y++)
         {
-            if(y<x) drawPixel(x+EPD_HEIGHT-size,EPD_WIDTH-y,value);
+            if(y<x) drawPixel(x+EPD_HEIGHT-size,EPD_WIDTH-y,ink);
         }
     }
 
@@ -692,8 +692,8 @@ void Renderer::drawVoltage(unsigned char* framebuffer,float voltage)
 void Renderer::drawBattery(unsigned char* framebuffer,int level)
 {
     this->framebuffer = framebuffer;
-    drawSquare(EPD_HEIGHT-6*GLYPH_WIDTH,0,EPD_HEIGHT,GLYPH_HEIGHT,true);
-    drawSquare(0,0,6*GLYPH_WIDTH,GLYPH_HEIGHT,true);
+    drawRectangle(EPD_HEIGHT-6*GLYPH_WIDTH,0,EPD_HEIGHT,GLYPH_HEIGHT,false);
+    drawRectangle(0,0,6*GLYPH_WIDTH,GLYPH_HEIGHT,false);
     std::string voltageString = std::to_string(level)+ "%";
     int voltageStringLength = voltageString.length();
     int coordx = EPD_HEIGHT - GLYPH_WIDTH/2 -  (GLYPH_WIDTH*(voltageStringLength/2+1));
@@ -749,7 +749,7 @@ void Renderer::drawImage(Image image,int startX, int startY)
     {
         for(int y=0;y<h;y++)
         {
-            bool pixelVal = pixels[x+y*w]>250;
+            bool pixelVal = !(pixels[x+y*w]>250);
             this->drawPixel(x+startX,EPD_WIDTH-y-startY,pixelVal);
         }
 
@@ -781,4 +781,46 @@ void Renderer::drawProgressBar(int y,int length,int percent)
         else currentX += this->drawCharacter(currentX,y,9617,false,false,1);
     }
 
+}
+
+void Renderer::drawRightArrow(int xTip, int yTip, int armLength, int height, int thickness, bool ink)
+{
+    if(armLength>1) drawRectangle(xTip-armLength,yTip-thickness+1,armLength-2,2*thickness,ink);
+    int diagonalThickness = 3 * thickness;
+    for(int i=0;i<height;i++)
+    {
+        int yTop = yTip + i;
+        int yBottom = yTip - i;
+        int x = xTip - i;
+        drawRectangle(x-diagonalThickness,yTop,diagonalThickness,1,ink);
+        drawRectangle(x-diagonalThickness,yBottom,diagonalThickness,1,ink);
+    }
+}
+
+void Renderer::drawUpArrow(int xTip, int yTip, int armLength, int height, int thickness, bool ink)
+{
+    if(armLength>1) drawRectangle(xTip-thickness+1,yTip-armLength,2*thickness,armLength-2,ink);
+    int diagonalThickness = 3 * thickness;
+    for(int i=0;i<height;i++)
+    {
+        int xTop = xTip + i;
+        int xBottom = xTip - i;
+        int y = yTip - i;
+        drawRectangle(xBottom,y-diagonalThickness,1,diagonalThickness,ink);
+        drawRectangle(xTop,y-diagonalThickness,1,diagonalThickness,ink);
+    }
+}
+
+void Renderer::drawDownArrow(int xTip, int yTip, int armLength, int height, int thickness, bool ink)
+{
+    if(armLength>1) drawRectangle(xTip-thickness+1,yTip+2,2*thickness,armLength,ink);
+    int diagonalThickness = 3 * thickness;
+    for(int i=0;i<height;i++)
+    {
+        int xTop = xTip + i;
+        int xBottom = xTip - i;
+        int y = yTip + i;
+        drawRectangle(xBottom,y,1,diagonalThickness,ink);
+        drawRectangle(xTop,y,1,diagonalThickness,ink);
+    }
 }

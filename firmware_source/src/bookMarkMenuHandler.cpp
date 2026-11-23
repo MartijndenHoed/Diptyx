@@ -2,11 +2,11 @@
 #include "esp_log.h"
 #include "device.h"
 
-BookMarkMenuHandler::BookMarkMenuHandler(Book *book, Renderer *renderer,Epub *epub,unsigned char* leftPageFrameBuffer,unsigned char* rightPageFrameBuffer)
+BookMarkMenuHandler::BookMarkMenuHandler(Book *book, Renderer *renderer,FileParser *fileParser,unsigned char* leftPageFrameBuffer,unsigned char* rightPageFrameBuffer)
 {
     this->renderer = renderer;
     this->book = book;
-    this->epub = epub;
+    this->fileParser = fileParser;
     this->leftPageFrameBuffer = leftPageFrameBuffer;
     this->rightPageFrameBuffer = rightPageFrameBuffer;
     this->preservedFramebuffer = (unsigned char*)calloc(EPD_WIDTH * EPD_HEIGHT / 8,sizeof(unsigned char));
@@ -25,7 +25,7 @@ void BookMarkMenuHandler::drawMenu()
     renderer->framebuffer = leftPageFrameBuffer;
     int menuElementWidth = 150;
     int menuElementHeight = 50;
-    renderer->drawSquare(0,0,EPD_HEIGHT,menuElementHeight+2,true);
+    renderer->drawRectangle(0,0,EPD_HEIGHT,menuElementHeight+2,false);
     for(int i=0;i<menuElements.size();i++)
     {
         if(bookMarkOnPage && menuElements[i].text=="Add bookmark")  menuElements[i].text="Remove bookmark";
@@ -55,7 +55,7 @@ void BookMarkMenuHandler::drawMenu()
     {
         const int MAX_VISIBLE_ITEMS = 20;
 
-        int chapterCount = epub->get_toc_items_count();
+        int chapterCount = fileParser->getTOCLength();
         if(menuElements[currentMenuElementIndex].ID==MenuElementID::GotoChapter) maxVerticalElements = chapterCount;
         if(menuElements[currentMenuElementIndex].ID==MenuElementID::GotoMark) maxVerticalElements = book->bookMarks.size();
 
@@ -74,12 +74,12 @@ void BookMarkMenuHandler::drawMenu()
         // Calculate total height
     subElementHeight = (visibleCount + 1) * GLYPH_HEIGHT;
 
-        renderer->drawSquare(
+        renderer->drawRectangle(
             EPD_HEIGHT / 2 - menuElementWidth / 2 - 4,
             menuElementHeight,
             menuElementWidth + 8,
             subElementHeight - 2,
-            true
+            false
         );
         renderer->drawPaddedBox(
             EPD_HEIGHT / 2 - menuElementWidth / 2 - 2,
@@ -111,18 +111,18 @@ void BookMarkMenuHandler::drawMenu()
             bool selected = (chapterIndex == currentVerticalElementIndex - 1);
 
             std::string itemString;
-            if(menuElements[currentMenuElementIndex].ID==MenuElementID::GotoChapter) itemString = epub->get_toc_item(chapterIndex).title.substr(0, 18);
+            if(menuElements[currentMenuElementIndex].ID==MenuElementID::GotoChapter) itemString = fileParser->getTOCItemTitle(chapterIndex).substr(0, 18);
             if(menuElements[currentMenuElementIndex].ID==MenuElementID::GotoMark) itemString = "Page: " + std::to_string(book->bookMarks[i].pageIndex+1) + "-" + std::to_string(book->bookMarks[i].pageIndex+2);
             //ESP_LOGI("QuickMenu", "toc name: %s", itemString.c_str());
 
             int y = menuElementHeight + (i) * GLYPH_HEIGHT + 6;
             if (selected)
-                renderer->drawSquare(
+                renderer->drawRectangle(
                     EPD_HEIGHT / 2 - itemString.length() * GLYPH_WIDTH / 4,
                     y,
                     itemString.length() * GLYPH_WIDTH / 2 + 1,
                     GLYPH_HEIGHT,
-                    !selected
+                    selected
                 );
 
             renderer->drawString(
