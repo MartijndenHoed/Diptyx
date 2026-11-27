@@ -122,6 +122,7 @@ Book::Book(const Book& other)
     this->chapterPageCounts = other.chapterPageCounts;
     this->currentPage = other.currentPage;
     this->renderSettings = other.renderSettings;
+    this->wordCount = other.wordCount;
 }
 
 Book::~Book()
@@ -188,6 +189,7 @@ std::string Book::toJSON() const {
     cJSON_AddNumberToObject(root, "currentPage", currentPage);
     cJSON_AddNumberToObject(root, "badParse", badParse);
     cJSON_AddNumberToObject(root, "favorite", favorite);
+    cJSON_AddNumberToObject(root, "wordCount", wordCount);
 
     // chapters
     cJSON *chapters = cJSON_CreateArray();
@@ -268,6 +270,7 @@ Book *Book::fromJSON(const std::string &json) {
     cJSON *jfavorite = cJSON_GetObjectItem(root, "favorite");
     cJSON *jbookMarks = cJSON_GetObjectItem(root, "bookMarks");
     cJSON *jcachedImages = cJSON_GetObjectItem(root, "cachedImages");
+    cJSON *jwordCount = cJSON_GetObjectItem(root, "wordCount");
 
     book->currentPageChapterIndex = cJSON_IsNumber(jreadChapter) ? jreadChapter->valueint : 0;
     book->currentPageElementIndex = cJSON_IsNumber(jreadElement) ? jreadElement->valueint : 0;
@@ -275,6 +278,7 @@ Book *Book::fromJSON(const std::string &json) {
     book->currentPage = cJSON_IsNumber(jread) ? jread->valueint : 0;
     book->badParse = cJSON_IsNumber(jbadParse) ? jbadParse->valueint : false;
     book->favorite = cJSON_IsNumber(jfavorite) ? jfavorite->valueint : false;
+    book->wordCount = cJSON_IsNumber(jwordCount) ? jwordCount->valueint : false;
 
     // chapterPageCounts
     if (jchapterPages && cJSON_IsArray(jchapterPages)) {

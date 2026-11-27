@@ -189,6 +189,7 @@ void ContentParser::parseTextBlock(const std::vector<int> textBlock, bool newLin
             {
                 if(textBlockIndex+nextSpaceIndex>=textBlockSize || textBlock[textBlockIndex+nextSpaceIndex]==32) {
                     spaceFound=true;
+                    wordCount++;
                     break;
                 }
                 nextSpaceDistance+=Device::getInstance().renderer->fontHandler.getFontCharWidth(textBlock[textBlockIndex+nextSpaceIndex])  + bold; //find the distance to the next space

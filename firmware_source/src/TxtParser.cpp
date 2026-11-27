@@ -188,6 +188,7 @@ int TxtParser::parseTxtFile(char* content, size_t contentLength,int targetPage, 
     bool drawPage = (currentPage==targetPage)||(currentPage==targetPage+1);
     contentParser->finishLine(drawPage);
     contentParser->finishPage(drawPage);
+    if(indexingMode) activeBook->wordCount = contentParser->wordCount;
 
     delete contentParser;
     contentParser = nullptr;

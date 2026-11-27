@@ -47,5 +47,6 @@ public:
     Renderer *renderer = nullptr;
     int fontSize = 1;
     int textAlign = 0;
+    int wordCount = 0;
 private:
 };

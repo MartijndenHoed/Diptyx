@@ -658,6 +658,7 @@ bool EpubParser::renderPageToBuffers(int pageNumber, unsigned char *leftScreenBu
 
 bool EpubParser::indexChapters()
 {
+    activeBook->wordCount = 0;
     activeBook->chapterPageCounts.clear();
     activeBook->cachedImages.clear();
     activeBook->totalPageCount = 0;
@@ -702,6 +703,7 @@ bool EpubParser::indexChapters()
             if(pageCount%2) pageCount+=1;
             activeBook->chapterPageCounts.push_back(pageCount);
             activeBook->totalPageCount += pageCount;
+            activeBook->wordCount += parser->contentParser->wordCount;
             free(html);
             delete parser;
         } 

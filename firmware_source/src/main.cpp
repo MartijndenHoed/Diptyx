@@ -172,7 +172,7 @@ void main_task(void *param) {
             if(esp_timer_get_time() - now> 3000000) //shutdown if pressed for more than 3s
             {
                 Device::dubbleBuzz();
-                notificationHandler->drawNotification("Shutting down device...");
+                notificationHandler->drawNotification("Power off");
                 Device::shutdown();
             }
 
@@ -203,7 +203,8 @@ void main_task(void *param) {
     if(device.state==Device::State::Reading) //Here we check if there is actually a valid book loading
     {
         Book *book = bookHandler->findBookByPath(device.activeBookPath);
-        if(book->totalPageCount==0) device.state=Device::State::Menu; 
+        if(!book) device.state=Device::State::Menu; 
+        else if(book->totalPageCount==0) device.state=Device::State::Menu; 
     }
 
 

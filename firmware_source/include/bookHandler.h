@@ -60,6 +60,7 @@ public:
     int currentPageChapterIndex = 0;
     bool badParse = false;
     bool favorite = false;
+    int wordCount = 0;
     std::vector<int> chapterPageCounts;
     std::vector<BookMark> bookMarks;
     std::vector<cachedImage> cachedImages;
